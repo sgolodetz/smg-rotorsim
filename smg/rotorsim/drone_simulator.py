@@ -22,7 +22,7 @@ from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
-from .opengl_scene_renderer import OpenGLSceneRenderer
+from .scene_renderer import SceneRenderer
 
 
 class DroneSimulator:
@@ -41,7 +41,6 @@ class DroneSimulator:
         self.__drone_mesh_filename: str = drone_mesh_filename
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
-        self.__gl_scene_renderer: Optional[OpenGLSceneRenderer] = None
         self.__octree_drawer: Optional[OcTreeDrawer] = None
         self.__plan_paths: bool = plan_paths
         self.__planning_octree_filename: Optional[str] = planning_octree_filename
@@ -51,6 +50,7 @@ class DroneSimulator:
         self.__scene_mesh_filename: Optional[str] = scene_mesh_filename
         self.__scene_octree: Optional[OcTree] = None
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
+        self.__scene_renderer: Optional[SceneRenderer] = None
         self.__window_size: Tuple[int, int] = window_size
 
         # The path planning variables, together with their lock.
@@ -118,8 +118,8 @@ class DroneSimulator:
         # Construct the OpenGL image renderer.
         self.__gl_image_renderer = OpenGLImageRenderer()
 
-        # Construct the OpenGL scene renderer.
-        self.__gl_scene_renderer = OpenGLSceneRenderer()
+        # Construct the scene renderer.
+        self.__scene_renderer = SceneRenderer()
 
         # Construct the octree drawer.
         self.__octree_drawer = OcTreeDrawer()
@@ -253,9 +253,9 @@ class DroneSimulator:
             if self.__drone is not None:
                 self.__drone.terminate()
 
-            # If the OpenGL scene renderer exists, destroy it.
-            if self.__gl_scene_renderer is not None:
-                self.__gl_scene_renderer.terminate()
+            # If the scene renderer exists, destroy it.
+            if self.__scene_renderer is not None:
+                self.__scene_renderer.terminate()
 
             # If the OpenGL image renderer exists, destroy it.
             if self.__gl_image_renderer is not None:
@@ -279,11 +279,11 @@ class DroneSimulator:
         :return:                    TODO
         """
         if self.__scene_mesh is not None:
-            return self.__gl_scene_renderer.render_to_image(
+            return self.__scene_renderer.render_to_image(
                 self.__scene_mesh.render, world_from_camera, image_size, intrinsics
             )
         elif self.__scene_octree is not None:
-            return self.__gl_scene_renderer.render_to_image(
+            return self.__scene_renderer.render_to_image(
                 lambda: OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer),
                 world_from_camera, image_size, intrinsics
             )
@@ -322,15 +322,15 @@ class DroneSimulator:
 
                 # Render the scene itself.
                 if self.__scene_octree is not None:
-                    OpenGLSceneRenderer.render(
+                    SceneRenderer.render(
                         lambda: OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
                     )
                 elif self.__scene_mesh is not None:
-                    OpenGLSceneRenderer.render(self.__scene_mesh.render)
+                    SceneRenderer.render(self.__scene_mesh.render)
 
                 # Render the mesh for the drone (at its current pose).
                 with OpenGLMatrixContext(GL_MODELVIEW, lambda: OpenGLUtil.mult_matrix(drone_chassis_w_t_c)):
-                    OpenGLSceneRenderer.render(lambda: self.__drone_mesh.render())
+                    SceneRenderer.render(lambda: self.__drone_mesh.render(), use_backface_culling=True)
 
                 # If a path has been planned, draw it.
                 acquired: bool = self.__planning_lock.acquire(blocking=False)
