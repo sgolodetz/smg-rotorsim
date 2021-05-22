@@ -414,9 +414,9 @@ class DroneSimulator:
             # Smooth any path found.
             if path is not None:
                 start = timer()
-                interpolated_path = PlanningToolkit.interpolate_path(path)
+                interpolated_path = path.interpolate()
                 end = timer()
-                # print(f"Path Smoothing: {end - start}s")
+                # print(f"Path Interpolation: {end - start}s")
 
             with self.__planning_lock:
                 self.__interpolated_path = interpolated_path
