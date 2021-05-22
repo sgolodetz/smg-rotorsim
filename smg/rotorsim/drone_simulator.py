@@ -14,7 +14,7 @@ from timeit import default_timer as timer
 from typing import List, Optional, Tuple
 
 from smg.joysticks import FutabaT6K
-from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, PlanningToolkit
+from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
 from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.controllers import KeyboardCameraController
@@ -55,9 +55,8 @@ class DroneSimulator:
 
         # The path planning variables, together with their lock.
         self.__current_pos: Optional[np.ndarray] = None
-        self.__interpolated_path: Optional[np.ndarray] = None
-        self.__path: Optional[np.ndarray] = None
-        self.__path_aux: Optional[np.ndarray] = None
+        self.__interpolated_path: Optional[Path] = None
+        self.__path: Optional[Path] = None
         self.__planning_lock: threading.Lock = threading.Lock()
 
         # FIXME: These shouldn't be hard-coded.
@@ -337,12 +336,12 @@ class DroneSimulator:
                 if acquired:
                     try:
                         if self.__path is not None:
-                            OpenGLUtil.render_path(
-                                self.__path, start_colour=(0, 1, 1), end_colour=(0, 1, 1), width=5,
+                            self.__path.render(
+                                start_colour=(0, 1, 1), end_colour=(0, 1, 1), width=5,
                                 waypoint_colourer=self.__planning_toolkit.occupancy_colourer()
                             )
-                            # OpenGLUtil.render_path(
-                            #     self.__interpolated_path, start_colour=(1, 1, 0), end_colour=(1, 0, 1), width=5,
+                            # self.__interpolated_path.render(
+                            #     start_colour=(1, 1, 0), end_colour=(1, 0, 1), width=5,
                             #     waypoint_colourer=None
                             # )
                     finally:
@@ -383,9 +382,8 @@ class DroneSimulator:
                         return
 
                 current_pos: Optional[np.ndarray] = self.__current_pos.copy()
-                interpolated_path: Optional[np.ndarray] = self.__interpolated_path
-                path: Optional[np.ndarray] = self.__path
-                path_aux: Optional[np.ndarray] = self.__path_aux
+                interpolated_path: Optional[Path] = self.__interpolated_path
+                path: Optional[Path] = self.__path
                 waypoints: List[np.ndarray] = self.__waypoints
 
             ay: float = 10
@@ -393,7 +391,7 @@ class DroneSimulator:
             if path is None:
                 # Plan an initial path through the waypoints.
                 start = timer()
-                path, path_aux = planner.plan_multipath(
+                path = planner.plan_multipath(
                     [current_pos] + waypoints,
                     d=PlanningToolkit.l1_distance(ay=ay),
                     h=PlanningToolkit.l1_distance(ay=ay),
@@ -404,8 +402,8 @@ class DroneSimulator:
                 end = timer()
                 # print(f"Path Planning: {end - start}s")
             elif len(path) > 1:
-                path, path_aux = planner.update_multipath(
-                    current_pos, path, path_aux,
+                path = planner.update_multipath(
+                    current_pos, path,
                     d=PlanningToolkit.l1_distance(ay=ay),
                     h=PlanningToolkit.l1_distance(ay=ay),
                     allow_shortcuts=True,
@@ -423,7 +421,6 @@ class DroneSimulator:
             with self.__planning_lock:
                 self.__interpolated_path = interpolated_path
                 self.__path = path
-                self.__path_aux = path_aux
                 self.__planning_is_needed = False
 
             # TODO
