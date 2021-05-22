@@ -391,7 +391,7 @@ class DroneSimulator:
             if path is None:
                 # Plan an initial path through the waypoints.
                 start = timer()
-                path = planner.plan_multipath(
+                path = planner.plan_multi_step_path(
                     [current_pos] + waypoints,
                     d=PlanningToolkit.l1_distance(ay=ay),
                     h=PlanningToolkit.l1_distance(ay=ay),
@@ -402,7 +402,7 @@ class DroneSimulator:
                 end = timer()
                 # print(f"Path Planning: {end - start}s")
             elif len(path) > 1:
-                path = planner.update_multipath(
+                path = planner.update_path(
                     current_pos, path,
                     d=PlanningToolkit.l1_distance(ay=ay),
                     h=PlanningToolkit.l1_distance(ay=ay),
