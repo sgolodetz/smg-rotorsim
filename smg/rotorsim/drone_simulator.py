@@ -30,12 +30,14 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, drone_mesh_filename: str, intrinsics: Tuple[float, float, float, float],
+    def __init__(self, *, debug: bool = False, drone_mesh_filename: str,
+                 intrinsics: Tuple[float, float, float, float],
                  plan_paths: bool = False, planning_octree_filename: Optional[str],
                  scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
                  window_size: Tuple[int, int] = (1280, 480)):
         self.__alive: bool = False
 
+        self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
         self.__drone_mesh_filename: str = drone_mesh_filename
@@ -390,33 +392,44 @@ class DroneSimulator:
 
             if path is None:
                 # Plan an initial path through the waypoints.
-                start = timer()
+                if self.__debug:
+                    start = timer()
+
                 path = planner.plan_multi_step_path(
                     [current_pos] + waypoints,
-                    d=PlanningToolkit.l1_distance(ay=ay),
-                    h=PlanningToolkit.l1_distance(ay=ay),
-                    allow_shortcuts=True,
-                    pull_strings=True,
-                    use_clearance=True
+                    d=PlanningToolkit.l1_distance(ay=ay), h=PlanningToolkit.l1_distance(ay=ay),
+                    allow_shortcuts=True, pull_strings=True, use_clearance=True
                 )
-                end = timer()
-                # print(f"Path Planning: {end - start}s")
+
+                if self.__debug:
+                    end = timer()
+                    # noinspection PyUnboundLocalVariable
+                    print(f"Path Planning: {end - start}s")
             elif len(path) > 1:
+                # Update the existing path based on the agent's current position.
+                if self.__debug:
+                    start = timer()
+
                 path = planner.update_path(
-                    current_pos, path,
-                    d=PlanningToolkit.l1_distance(ay=ay),
-                    h=PlanningToolkit.l1_distance(ay=ay),
-                    allow_shortcuts=True,
-                    pull_strings=True,
-                    use_clearance=True
+                    current_pos, path, debug=True,
+                    d=PlanningToolkit.l1_distance(ay=ay), h=PlanningToolkit.l1_distance(ay=ay),
+                    allow_shortcuts=True, pull_strings=True, use_clearance=True
                 )
+
+                if self.__debug:
+                    end = timer()
+                    print(f"Path Updating: {end - start}s")
 
             # Smooth any path found.
             if path is not None:
-                start = timer()
+                if self.__debug:
+                    start = timer()
+
                 interpolated_path = path.interpolate()
-                end = timer()
-                # print(f"Path Interpolation: {end - start}s")
+
+                if self.__debug:
+                    end = timer()
+                    print(f"Path Interpolation: {end - start}s")
 
             with self.__planning_lock:
                 self.__interpolated_path = interpolated_path
