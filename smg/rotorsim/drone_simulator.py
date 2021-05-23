@@ -26,15 +26,25 @@ from .scene_renderer import SceneRenderer
 
 
 class DroneSimulator:
-    """TODO"""
+    """A simple drone simulator."""
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_mesh_filename: str,
-                 intrinsics: Tuple[float, float, float, float],
-                 plan_paths: bool = False, planning_octree_filename: Optional[str],
-                 scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
-                 window_size: Tuple[int, int] = (1280, 480)):
+    def __init__(self, *, debug: bool = False, drone_mesh_filename: str, intrinsics: Tuple[float, float, float, float],
+                 plan_paths: bool = False, planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
+                 scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
+        """
+        Construct a drone simulator.
+
+        :param debug:                       Whether to print out debugging messages.
+        :param drone_mesh_filename:         The name of the file containing the mesh for the drone.
+        :param intrinsics:                  The camera intrinsics.
+        :param plan_paths:                  Whether to perform path planning or not.
+        :param planning_octree_filename:    The name of a file containing an octree for path planning (optional).
+        :param scene_mesh_filename:         The name of a file containing a mesh for the scene (optional).
+        :param scene_octree_filename:       The name of a file containing an octree for the scene (optional).
+        :param window_size:                 The size of window to use.
+        """
         self.__alive: bool = False
 
         self.__debug: bool = debug
@@ -126,7 +136,7 @@ class DroneSimulator:
         self.__octree_drawer = OcTreeDrawer()
         self.__octree_drawer.set_color_mode(CM_COLOR_HEIGHT)
 
-        # Load in the mesh for the drone, and prepare it for rendering.
+        # Load in the mesh for the drone.
         self.__drone_mesh = DroneSimulator.__convert_trimesh_to_opengl(
             DroneSimulator.__load_tello_mesh(self.__drone_mesh_filename)
         )
@@ -176,21 +186,22 @@ class DroneSimulator:
                         if self.__drone.get_state() == SimulatedDrone.IDLE:
                             pygame.mixer.music.play(loops=-1)
 
-                        # Take off.
+                        # Tell the drone to take off.
                         self.__drone.takeoff()
                 elif event.type == pygame.JOYBUTTONUP:
-                    # If Button 0 on the Futaba T6K is set to its "released" state, land.
+                    # If Button 0 on the Futaba T6K is set to its "released" state:
                     if event.button == 0:
+                        # Tell the drone to land.
                         self.__drone.land()
                 elif event.type == pygame.QUIT:
                     # If the user wants us to quit, do so.
                     return
 
-            # Quit if both Button 0 and Button 1 on the Futaba T6K are set to their "released" state.
+            # Also quit if both Button 0 and Button 1 on the Futaba T6K are set to their "released" state.
             if joystick.get_button(0) == 0 and joystick.get_button(1) == 0:
                 return
 
-            # If the drone is in the idle state, stop the "drone flying" sound.
+            # If the drone is in the idle state, make sure the "drone flying" sound is stopped.
             if self.__drone.get_state() == SimulatedDrone.IDLE:
                 pygame.mixer.music.stop()
 
@@ -218,7 +229,8 @@ class DroneSimulator:
             # Get the drone's image and poses.
             drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
 
-            # If a path has been planned, draw it.
+            # If the drone is flying, provide the path planner with the current position of the drone, and tell it
+            # that some path planning is needed.
             acquired: bool = self.__planning_lock.acquire(blocking=False)
             if acquired:
                 try:
@@ -272,29 +284,38 @@ class DroneSimulator:
     def __render_drone_image(self, world_from_camera: np.ndarray, image_size: Tuple[int, int],
                              intrinsics: Tuple[float, float, float, float]) -> np.ndarray:
         """
-        TODO
+        Render a synthetic image of what the drone can see of the scene from the specified pose.
 
-        :param world_from_camera:   TODO
-        :param image_size:          TODO
-        :param intrinsics:          TODO
-        :return:                    TODO
+        :param world_from_camera:   The pose from which to render a synthetic image of the scene.
+        :param image_size:          The size of image to render.
+        :param intrinsics:          The camera intrinsics.
+        :return:                    The rendered image.
         """
+        # If a mesh is available for the scene, render that.
         if self.__scene_mesh is not None:
             return self.__scene_renderer.render_to_image(
                 self.__scene_mesh.render, world_from_camera, image_size, intrinsics
             )
+        # Otherwise, if an octree is available for the scene, render that.
         elif self.__scene_octree is not None:
             return self.__scene_renderer.render_to_image(
                 lambda: OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer),
                 world_from_camera, image_size, intrinsics
             )
+        # Otherwise, simply render a blank image of the right size.
         else:
             width, height = image_size
             return np.zeros((height, width, 3), dtype=np.uint8)
 
     def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_image: np.ndarray, viewing_pose: np.ndarray) \
             -> None:
-        """Render the contents of the window."""
+        """
+        Render the contents of the window.
+
+        :param drone_chassis_w_t_c: The pose of the drone's chassis.
+        :param drone_image:         A synthetic image rendered from the pose of the drone's camera.
+        :param viewing_pose:        The pose of the free-view camera.
+        """
         # Clear the window.
         OpenGLUtil.set_viewport((0.0, 0.0), (1.0, 1.0), self.__window_size)
         glClearColor(1.0, 1.0, 1.0, 0.0)
