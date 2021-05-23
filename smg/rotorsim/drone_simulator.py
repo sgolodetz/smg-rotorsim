@@ -396,8 +396,12 @@ class DroneSimulator:
         # Construct the path planner.
         planner: AStarPathPlanner = AStarPathPlanner(self.__planning_toolkit, debug=False)
 
-        # TODO
+        # Until the simulator should terminate:
         while not self.__should_terminate.is_set():
+            # Wait until path planning is required, and then capture the shared variables locally so that we
+            # can use them without having to hold on to the lock. Note that we copy the current position, as
+            # the shared variable may be modified during path planning, but we don't need to copy things like
+            # the paths and the waypoints, since the only thread that ever writes to them is this one.
             with self.__planning_lock:
                 while not self.__planning_is_needed:
                     self.__planning_needed.wait(0.1)
@@ -409,10 +413,10 @@ class DroneSimulator:
                 path: Optional[Path] = self.__path
                 waypoints: List[np.ndarray] = self.__waypoints
 
+            # If no path has yet been planned through the waypoints, plan one now. Otherwise, if a path already
+            # exists, update it based on the agent's current position.
             ay: float = 10
-
             if path is None:
-                # Plan an initial path through the waypoints.
                 if self.__debug:
                     start = timer()
 
@@ -427,7 +431,6 @@ class DroneSimulator:
                     # noinspection PyUnboundLocalVariable
                     print(f"Path Planning: {end - start}s")
             elif len(path) > 1:
-                # Update the existing path based on the agent's current position.
                 if self.__debug:
                     start = timer()
 
@@ -441,7 +444,7 @@ class DroneSimulator:
                     end = timer()
                     print(f"Path Updating: {end - start}s")
 
-            # Smooth any path found.
+            # Perform curve fitting and interpolation on any path found.
             if path is not None:
                 if self.__debug:
                     start = timer()
@@ -452,12 +455,14 @@ class DroneSimulator:
                     end = timer()
                     print(f"Path Interpolation: {end - start}s")
 
+            # Update the shared path variables so that the new path and its interpolated variant can be picked up
+            # by other threads.
             with self.__planning_lock:
                 self.__interpolated_path = interpolated_path
                 self.__path = path
                 self.__planning_is_needed = False
 
-            # TODO
+            # Wait for 10ms before performing any further path planning, so as to avoid a spin loop.
             time.sleep(0.01)
 
     # PRIVATE STATIC METHODS
