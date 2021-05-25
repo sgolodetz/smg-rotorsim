@@ -11,12 +11,13 @@ import time
 
 from OpenGL.GL import *
 from timeit import default_timer as timer
-from typing import List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from smg.joysticks import FutabaT6K
 from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
 from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
+from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotory.drones import SimulatedDrone
@@ -63,6 +64,7 @@ class DroneSimulator:
         self.__scene_octree: Optional[OcTree] = None
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
         self.__scene_renderer: Optional[SceneRenderer] = None
+        self.__third_person: bool = False
         self.__window_size: Tuple[int, int] = window_size
 
         # The path planning variables, together with their lock.
@@ -193,6 +195,11 @@ class DroneSimulator:
                     if event.button == 0:
                         # Tell the drone to land.
                         self.__drone.land()
+                elif event.type == pygame.KEYDOWN:
+                    # If the user presses the 't' key:
+                    if event.key == pygame.K_t:
+                        # Toggle the third-person view.
+                        self.__third_person = not self.__third_person
                 elif event.type == pygame.QUIT:
                     # If the user wants us to quit, do so.
                     return
@@ -288,31 +295,77 @@ class DroneSimulator:
 
     # PRIVATE METHODS
 
-    def __render_drone_image(self, world_from_camera: np.ndarray, image_size: Tuple[int, int],
+    def __render_drone_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
                              intrinsics: Tuple[float, float, float, float]) -> np.ndarray:
         """
-        Render a synthetic image of what the drone can see of the scene from the specified pose.
+        Render a synthetic image of what the drone can see of the scene from its current pose.
 
-        :param world_from_camera:   The pose from which to render a synthetic image of the scene.
-        :param image_size:          The size of image to render.
-        :param intrinsics:          The camera intrinsics.
-        :return:                    The rendered image.
+        .. note::
+            This function effectively just uses the scene renderer to apply appropriate lighting to a scene
+            actually rendered by the function returned by __render_drone_scene.
+
+        :param camera_w_t_c:    The pose of the drone's camera.
+        :param chassis_w_t_c:   The pose of the drone's chassis.
+        :param image_size:      The size of image to render.
+        :param intrinsics:      The camera intrinsics.
+        :return:                The rendered image.
         """
-        # If a mesh is available for the scene, render that.
-        if self.__scene_mesh is not None:
-            return self.__scene_renderer.render_to_image(
-                self.__scene_mesh.render, world_from_camera, image_size, intrinsics
-            )
-        # Otherwise, if an octree is available for the scene, render that.
-        elif self.__scene_octree is not None:
-            return self.__scene_renderer.render_to_image(
-                lambda: OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer),
-                world_from_camera, image_size, intrinsics
-            )
-        # Otherwise, simply render a blank image of the right size.
-        else:
-            width, height = image_size
-            return np.zeros((height, width, 3), dtype=np.uint8)
+        # Adjust the camera pose for third-person view if needed.
+        cam: SimpleCamera = CameraPoseConverter.pose_to_camera(np.linalg.inv(camera_w_t_c))
+        if self.__third_person:
+            cam.move_n(-0.5)
+
+        # Render a synthetic image of what the drone can see of the scene from its (possibly adjusted) camera pose.
+        return self.__scene_renderer.render_to_image(
+            self.__render_drone_scene(chassis_w_t_c), np.linalg.inv(CameraPoseConverter.camera_to_pose(cam)),
+            image_size, intrinsics
+        )
+
+    def __render_drone_scene(self, chassis_w_t_c: np.ndarray) -> Callable[[], None]:
+        """
+        Make a function that will render what the drone can see of the scene from its current pose.
+
+        :param chassis_w_t_c:   The pose of the drone's chassis.
+        :return:                A function that will render what the drone can see of the scene from its current pose.
+        """
+        def inner() -> None:
+            """Render what the drone can see of the scene from its current pose."""
+            # If a mesh is available for the scene, render it.
+            if self.__scene_mesh is not None:
+                self.__scene_mesh.render()
+            # Otherwise, if an octree is available for the scene, render it.
+            elif self.__scene_octree is not None:
+                OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
+
+            # If a path has been planned, draw it.
+            acquired: bool = self.__planning_lock.acquire(blocking=False)
+            if acquired:
+                try:
+                    if self.__path is not None:
+                        self.__path.render(
+                            start_colour=(0, 1, 1), end_colour=(0, 1, 1), width=5,
+                            waypoint_colourer=self.__planning_toolkit.occupancy_colourer()
+                        )
+                        # self.__interpolated_path.render(
+                        #     start_colour=(1, 1, 0), end_colour=(1, 0, 1), width=5,
+                        #     waypoint_colourer=None
+                        # )
+                finally:
+                    self.__planning_lock.release()
+
+            # If we're in third-person mode:
+            if self.__third_person:
+                # Render the mesh for the drone (at its current pose), blending it over the rest of the scene.
+                glEnable(GL_BLEND)
+                glBlendColor(0.5, 0.5, 0.5, 0.5)
+                glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR)
+
+                with OpenGLMatrixContext(GL_MODELVIEW, lambda: OpenGLUtil.mult_matrix(chassis_w_t_c)):
+                    SceneRenderer.render(lambda: self.__drone_mesh.render(), use_backface_culling=True)
+
+                glDisable(GL_BLEND)
+
+        return inner
 
     def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_image: np.ndarray, viewing_pose: np.ndarray) \
             -> None:
