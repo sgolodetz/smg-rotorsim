@@ -11,7 +11,7 @@ import time
 
 from OpenGL.GL import *
 from timeit import default_timer as timer
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from smg.joysticks import FutabaT6K
 from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
@@ -241,8 +241,15 @@ class DroneSimulator:
                 finally:
                     self.__planning_lock.release()
 
-            # Allow the user to control the free-view camera.
-            camera_controller.update(pygame.key.get_pressed(), timer() * 1000)
+            # Get the keys that are currently being pressed by the user.
+            pressed_keys: Sequence[bool] = pygame.key.get_pressed()
+
+            # Move the free-view camera based on the keys that are being pressed.
+            camera_controller.update(pressed_keys, timer() * 1000)
+
+            # If the user presses the 'g' key, set the drone's origin to the current location of the free-view camera.
+            if pressed_keys[pygame.K_g]:
+                self.__drone.set_drone_origin(camera_controller.get_camera())
 
             # Render the contents of the window.
             self.__render_window(
