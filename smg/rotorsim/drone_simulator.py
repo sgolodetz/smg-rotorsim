@@ -139,6 +139,8 @@ class DroneSimulator:
         self.__octree_drawer.set_color_mode(CM_COLOR_HEIGHT)
 
         # Load in the mesh for the drone.
+        # FIXME: This is currently hard-coded to expect a file containing the Tello mesh, but we should make it
+        #        more general.
         self.__drone_mesh = DroneSimulator.__convert_trimesh_to_opengl(
             DroneSimulator.__load_tello_mesh(self.__drone_mesh_filename)
         )

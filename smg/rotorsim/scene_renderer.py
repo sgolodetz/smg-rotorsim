@@ -3,11 +3,10 @@ import numpy as np
 from OpenGL.GL import *
 from typing import Callable, Generic, List, Optional, Tuple, TypeVar
 
-from smg.rigging.helpers import CameraPoseConverter
-
 from smg.opengl.opengl_framebuffer import OpenGLFrameBuffer
 from smg.opengl.opengl_matrix_context import OpenGLMatrixContext
 from smg.opengl.opengl_util import OpenGLUtil
+from smg.rigging.helpers import CameraPoseConverter
 
 
 # TYPE VARIABLE
