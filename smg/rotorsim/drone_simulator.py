@@ -31,14 +31,15 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_mesh_filename: str, intrinsics: Tuple[float, float, float, float],
-                 plan_paths: bool = False, planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
+    def __init__(self, *, debug: bool = False, drone_mesh: o3d.geometry.TriangleMesh,
+                 intrinsics: Tuple[float, float, float, float], plan_paths: bool = False,
+                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
                  scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
         :param debug:                       Whether to print out debugging messages.
-        :param drone_mesh_filename:         The name of the file containing the mesh for the drone.
+        :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
         :param plan_paths:                  Whether to perform path planning or not.
         :param planning_octree_filename:    The name of a file containing an octree for path planning (optional).
@@ -51,7 +52,7 @@ class DroneSimulator:
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
-        self.__drone_mesh_filename: str = drone_mesh_filename
+        self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
         self.__octree_drawer: Optional[OcTreeDrawer] = None
@@ -138,10 +139,9 @@ class DroneSimulator:
         self.__octree_drawer = OcTreeDrawer()
         self.__octree_drawer.set_color_mode(CM_COLOR_HEIGHT)
 
-        # Load in the mesh for the drone.
-        # FIXME: This is currently hard-coded to expect a file containing the Tello mesh, but we should make it
-        #        more general.
-        self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(MeshUtil.load_tello_mesh(self.__drone_mesh_filename))
+        # Convert the Open3D mesh for the drone to an OpenGL one so that it can be rendered.
+        self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
+        self.__drone_mesh_o3d = None
 
         # Load in any mesh that has been provided for the scene.
         if self.__scene_mesh_filename is not None:
