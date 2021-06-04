@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import open3d as o3d
 import os
@@ -14,6 +13,7 @@ from timeit import default_timer as timer
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from smg.joysticks import FutabaT6K
+from smg.meshing import MeshUtil
 from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
 from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
@@ -31,14 +31,15 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_mesh_filename: str, intrinsics: Tuple[float, float, float, float],
-                 plan_paths: bool = False, planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
+    def __init__(self, *, debug: bool = False, drone_mesh: o3d.geometry.TriangleMesh,
+                 intrinsics: Tuple[float, float, float, float], plan_paths: bool = False,
+                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
                  scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
         :param debug:                       Whether to print out debugging messages.
-        :param drone_mesh_filename:         The name of the file containing the mesh for the drone.
+        :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
         :param plan_paths:                  Whether to perform path planning or not.
         :param planning_octree_filename:    The name of a file containing an octree for path planning (optional).
@@ -51,7 +52,7 @@ class DroneSimulator:
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
-        self.__drone_mesh_filename: str = drone_mesh_filename
+        self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
         self.__octree_drawer: Optional[OcTreeDrawer] = None
@@ -138,16 +139,13 @@ class DroneSimulator:
         self.__octree_drawer = OcTreeDrawer()
         self.__octree_drawer.set_color_mode(CM_COLOR_HEIGHT)
 
-        # Load in the mesh for the drone.
-        # FIXME: This is currently hard-coded to expect a file containing the Tello mesh, but we should make it
-        #        more general.
-        self.__drone_mesh = DroneSimulator.__convert_trimesh_to_opengl(
-            DroneSimulator.__load_tello_mesh(self.__drone_mesh_filename)
-        )
+        # Convert the Open3D mesh for the drone to an OpenGL one so that it can be rendered.
+        self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
+        self.__drone_mesh_o3d = None
 
         # Load in any mesh that has been provided for the scene.
         if self.__scene_mesh_filename is not None:
-            self.__scene_mesh = DroneSimulator.__convert_trimesh_to_opengl(
+            self.__scene_mesh = MeshUtil.convert_trimesh_to_opengl(
                 o3d.io.read_triangle_mesh(self.__scene_mesh_filename)
             )
 
@@ -526,42 +524,3 @@ class DroneSimulator:
 
             # Wait for 10ms before performing any further path planning, so as to avoid a spin loop.
             time.sleep(0.01)
-
-    # PRIVATE STATIC METHODS
-
-    @staticmethod
-    def __convert_trimesh_to_opengl(o3d_mesh: o3d.geometry.TriangleMesh) -> OpenGLTriMesh:
-        """
-        Convert an Open3D triangle mesh to an OpenGL one.
-
-        :param o3d_mesh:    The Open3D triangle mesh.
-        :return:            The OpenGL mesh.
-        """
-        # FIXME: This should probably be moved somewhere more central at some point.
-        o3d_mesh.compute_vertex_normals(True)
-        return OpenGLTriMesh(
-            np.asarray(o3d_mesh.vertices),
-            np.asarray(o3d_mesh.vertex_colors),
-            np.asarray(o3d_mesh.triangles),
-            vertex_normals=np.asarray(o3d_mesh.vertex_normals)
-        )
-
-    # noinspection PyArgumentList
-    @staticmethod
-    def __load_tello_mesh(filename: str) -> o3d.geometry.TriangleMesh:
-        """
-        Load the DJI Tello mesh from the specified file.
-
-        .. note::
-            There is a special function for this because the mesh needs some processing to get it into a usable format.
-
-        :param filename:    The name of the file containing the DJI Tello mesh.
-        :return:            The DJI Tello mesh.
-        """
-        mesh: o3d.geometry.TriangleMesh = o3d.io.read_triangle_mesh(filename)
-        mesh.translate(-mesh.get_center())
-        mesh.scale(0.002, np.zeros(3))
-        mesh.rotate(o3d.geometry.get_rotation_matrix_from_axis_angle(np.array([math.pi, 0, 0])))
-        mesh.compute_vertex_normals()
-        mesh.paint_uniform_color(np.array([0, 1, 1]))
-        return mesh
