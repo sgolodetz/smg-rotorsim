@@ -20,6 +20,7 @@ from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
+from smg.rotory.controllers import FutabaT6KDroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
@@ -156,13 +157,16 @@ class DroneSimulator:
             self.__scene_octree.read_binary(self.__scene_octree_filename)
 
         # Load in the "drone flying" sound.
-        pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
+        # pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
 
         # Construct the simulated drone.
         width, height = self.__window_size
         self.__drone = SimulatedDrone(
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
+
+        # Construct the drone controller.
+        drone_controller: FutabaT6KDroneController = FutabaT6KDroneController(self.__drone, joystick)
 
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
@@ -174,28 +178,29 @@ class DroneSimulator:
             self.__planning_thread = threading.Thread(target=self.__run_planning)
             self.__planning_thread.start()
 
-        # Prevent the drone's gimbal from being moved until we're ready.
-        can_move_gimbal: bool = False
-
         # Until the simulator should terminate:
         while not self.__should_terminate.is_set():
             # Process any PyGame events.
+            events: List[pygame.event.Event] = []
             for event in pygame.event.get():
-                if event.type == pygame.JOYBUTTONDOWN:
-                    # If Button 0 on the Futaba T6K is set to its "pressed" state:
-                    if event.button == 0:
-                        # Start playing the "drone flying" sound.
-                        if self.__drone.get_state() == SimulatedDrone.IDLE:
-                            pygame.mixer.music.play(loops=-1)
+                # Record the event for later use by the drone controller.
+                events.append(event)
 
-                        # Tell the drone to take off.
-                        self.__drone.takeoff()
-                elif event.type == pygame.JOYBUTTONUP:
-                    # If Button 0 on the Futaba T6K is set to its "released" state:
-                    if event.button == 0:
-                        # Tell the drone to land.
-                        self.__drone.land()
-                elif event.type == pygame.KEYDOWN:
+                # if event.type == pygame.JOYBUTTONDOWN:
+                #     # If Button 0 on the Futaba T6K is set to its "pressed" state:
+                #     if event.button == 0:
+                #         # Start playing the "drone flying" sound.
+                #         if self.__drone.get_state() == SimulatedDrone.IDLE:
+                #             pygame.mixer.music.play(loops=-1)
+                #
+                #         # Tell the drone to take off.
+                #         self.__drone.takeoff()
+                # elif event.type == pygame.JOYBUTTONUP:
+                #     # If Button 0 on the Futaba T6K is set to its "released" state:
+                #     if event.button == 0:
+                #         # Tell the drone to land.
+                #         self.__drone.land()
+                if event.type == pygame.KEYDOWN:
                     # If the user presses the 't' key:
                     if event.key == pygame.K_t:
                         # Toggle the third-person view.
@@ -209,32 +214,14 @@ class DroneSimulator:
                 return
 
             # If the drone is in the idle state, make sure the "drone flying" sound is stopped.
-            if self.__drone.get_state() == SimulatedDrone.IDLE:
-                pygame.mixer.music.stop()
-
-            # Update the movement of the drone based on the pitch, roll and yaw values output by the Futaba T6K.
-            self.__drone.move_forward(joystick.get_pitch())
-            self.__drone.turn(joystick.get_yaw())
-
-            if joystick.get_button(1) == 0:
-                self.__drone.move_right(0)
-                self.__drone.move_up(joystick.get_roll())
-            else:
-                self.__drone.move_right(joystick.get_roll())
-                self.__drone.move_up(0)
-
-            # If the throttle goes above half-way, enable movement of the drone's gimbal from now on.
-            throttle: float = joystick.get_throttle()
-            if throttle >= 0.5:
-                can_move_gimbal = True
-
-            # If the drone's gimbal can be moved, update its pitch based on the current value of the throttle.
-            # Note that the throttle value is in [0,1], so we rescale it to a value in [-1,1] as a first step.
-            if can_move_gimbal:
-                self.__drone.update_gimbal_pitch(2 * (joystick.get_throttle() - 0.5))
+            # if self.__drone.get_state() == SimulatedDrone.IDLE:
+            #     pygame.mixer.music.stop()
 
             # Get the drone's image and poses.
             drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
+
+            # Control the drone based on the values output by the Futaba T6K.
+            drone_controller.update(events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics())
 
             # If the drone is flying, provide the path planner with the current position of the drone, and tell it
             # that some path planning is needed.
