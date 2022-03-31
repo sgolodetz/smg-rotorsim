@@ -12,7 +12,6 @@ from OpenGL.GL import *
 from timeit import default_timer as timer
 from typing import Callable, List, Optional, Sequence, Tuple
 
-from smg.joysticks import FutabaT6K
 from smg.meshing import MeshUtil
 from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
@@ -20,7 +19,8 @@ from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
-from smg.rotory.controllers import DroneController, FutabaT6KDroneController, KeyboardDroneController
+from smg.rotory import DroneControllerFactory
+from smg.rotory.controllers import DroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
@@ -154,27 +154,10 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
-        # If we're trying to use a Futaba T6K to control the drone:
-        if self.__drone_controller_type == "futabat6k":
-            # Try to determine the joystick index of the Futaba T6K. If no joystick is plugged in, early out.
-            joystick_count: int = pygame.joystick.get_count()
-            joystick_idx: int = 0
-            if joystick_count == 0:
-                exit(0)
-            elif joystick_count != 1:
-                # TODO: Prompt the user for the joystick to use.
-                pass
-
-            # Construct and calibrate the Futaba T6K.
-            joystick: FutabaT6K = FutabaT6K(joystick_idx)
-            joystick.calibrate()
-
-            # Construct the drone controller.
-            drone_controller: DroneController = FutabaT6KDroneController(self.__drone, joystick)
-
-        # Otherwise, use the keyboard to control the drone.
-        else:
-            drone_controller: DroneController = KeyboardDroneController(self.__drone)
+        # Construct the drone controller.
+        drone_controller: DroneController = DroneControllerFactory.make_drone_controller(
+            self.__drone_controller_type, drone=self.__drone
+        )
 
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
