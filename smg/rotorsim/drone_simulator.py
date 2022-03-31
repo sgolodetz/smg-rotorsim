@@ -20,7 +20,7 @@ from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
-from smg.rotory.controllers import FutabaT6KDroneController
+from smg.rotory.controllers import DroneController, FutabaT6KDroneController, KeyboardDroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
@@ -32,7 +32,7 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_mesh: o3d.geometry.TriangleMesh,
+    def __init__(self, *, debug: bool = False, drone_controller_type: str, drone_mesh: o3d.geometry.TriangleMesh,
                  intrinsics: Tuple[float, float, float, float], plan_paths: bool = False,
                  planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
                  scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
@@ -40,6 +40,7 @@ class DroneSimulator:
         Construct a drone simulator.
 
         :param debug:                       Whether to print out debugging messages.
+        :param drone_controller_type:       The type of drone controller to use (futabat6k|keyboard).
         :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
         :param plan_paths:                  Whether to perform path planning or not.
@@ -52,6 +53,7 @@ class DroneSimulator:
 
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
+        self.__drone_controller_type: str = drone_controller_type
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
         self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
@@ -113,19 +115,6 @@ class DroneSimulator:
         # Make sure pygame always gets the user inputs.
         pygame.event.set_grab(True)
 
-        # Try to determine the joystick index of the Futaba T6K. If no joystick is plugged in, early out.
-        joystick_count: int = pygame.joystick.get_count()
-        joystick_idx: int = 0
-        if joystick_count == 0:
-            exit(0)
-        elif joystick_count != 1:
-            # TODO: Prompt the user for the joystick to use.
-            pass
-
-        # Construct and calibrate the Futaba T6K.
-        joystick: FutabaT6K = FutabaT6K(joystick_idx)
-        joystick.calibrate()
-
         # Create the window.
         pygame.display.set_mode(self.__window_size, pygame.DOUBLEBUF | pygame.OPENGL)
         pygame.display.set_caption("Drone Simulator")
@@ -165,8 +154,27 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
-        # Construct the drone controller.
-        drone_controller: FutabaT6KDroneController = FutabaT6KDroneController(self.__drone, joystick)
+        # If we're trying to use a Futaba T6K to control the drone:
+        if self.__drone_controller_type == "futabat6k":
+            # Try to determine the joystick index of the Futaba T6K. If no joystick is plugged in, early out.
+            joystick_count: int = pygame.joystick.get_count()
+            joystick_idx: int = 0
+            if joystick_count == 0:
+                exit(0)
+            elif joystick_count != 1:
+                # TODO: Prompt the user for the joystick to use.
+                pass
+
+            # Construct and calibrate the Futaba T6K.
+            joystick: FutabaT6K = FutabaT6K(joystick_idx)
+            joystick.calibrate()
+
+            # Construct the drone controller.
+            drone_controller: DroneController = FutabaT6KDroneController(self.__drone, joystick)
+
+        # Otherwise, use the keyboard to control the drone.
+        else:
+            drone_controller: DroneController = KeyboardDroneController(self.__drone)
 
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
@@ -201,8 +209,8 @@ class DroneSimulator:
                     # If the user wants us to quit, do so.
                     return
 
-            # Also quit if both Button 0 and Button 1 on the Futaba T6K are set to their "released" state.
-            if joystick.get_button(0) == 0 and joystick.get_button(1) == 0:
+            # Also quit if the drone controller wants us to do so.
+            if drone_controller.should_quit():
                 return
 
             # Get the drone's image and poses.
