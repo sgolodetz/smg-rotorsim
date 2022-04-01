@@ -145,8 +145,9 @@ class DroneSimulator:
             self.__scene_octree = OcTree(scene_voxel_size)
             self.__scene_octree.read_binary(self.__scene_octree_filename)
 
-        # Load in the "drone flying" sound.
+        # Load in the "drone flying" sound, and note that the music isn't initially playing.
         pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
+        music_playing: bool = False
 
         # Construct the simulated drone.
         width, height = self.__window_size
@@ -177,13 +178,7 @@ class DroneSimulator:
                 # Record the event for later use by the drone controller.
                 events.append(event)
 
-                if event.type == pygame.JOYBUTTONDOWN:
-                    # If Button 0 on the Futaba T6K is set to its "pressed" state:
-                    if event.button == 0:
-                        # Start playing the "drone flying" sound.
-                        if self.__drone.get_state() == SimulatedDrone.IDLE:
-                            pygame.mixer.music.play(loops=-1)
-                elif event.type == pygame.KEYDOWN:
+                if event.type == pygame.KEYDOWN:
                     # If the user presses the 't' key:
                     if event.key == pygame.K_t:
                         # Toggle the third-person view.
@@ -200,11 +195,17 @@ class DroneSimulator:
             drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
 
             # Control the drone based on the values output by the Futaba T6K.
-            drone_controller.update(events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics())
+            drone_controller.iterate(events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics())
 
-            # If the drone is in the idle state, make sure the "drone flying" sound is stopped.
-            if self.__drone.get_state() == SimulatedDrone.IDLE:
+            # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
+            if self.__drone.get_state() != SimulatedDrone.IDLE and not music_playing:
+                pygame.mixer.music.play(loops=-1)
+                music_playing = True
+
+            # If the drone is in the idle state and the "drone flying" sound is playing, stop it.
+            if self.__drone.get_state() == SimulatedDrone.IDLE and music_playing:
                 pygame.mixer.music.stop()
+                music_playing = False
 
             # If the drone is flying, provide the path planner with the current position of the drone, and tell it
             # that some path planning is needed.
