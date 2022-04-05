@@ -19,8 +19,8 @@ from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
-from smg.rotory import DroneControllerFactory
-from smg.rotory.controllers import DroneController
+from smg.rotorcontrol import DroneControllerFactory
+from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
