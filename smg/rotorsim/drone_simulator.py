@@ -40,7 +40,7 @@ class DroneSimulator:
         Construct a drone simulator.
 
         :param debug:                       Whether to print out debugging messages.
-        :param drone_controller_type:       The type of drone controller to use (futabat6k|keyboard).
+        :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
         :param plan_paths:                  Whether to perform path planning or not.
