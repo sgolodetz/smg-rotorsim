@@ -468,7 +468,8 @@ class DroneSimulator:
                 path = planner.update_path(
                     current_pos, path, debug=True,
                     d=PlanningToolkit.l1_distance(ay=ay), h=PlanningToolkit.l1_distance(ay=ay),
-                    allow_shortcuts=True, pull_strings=True, use_clearance=True
+                    allow_shortcuts=True, pull_strings=True, use_clearance=True,
+                    nearest_waypoint_tolerance=0.2
                 )
 
                 if self.__debug:
