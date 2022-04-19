@@ -187,8 +187,8 @@ class DroneSimulator:
                     # If the user wants us to quit, do so.
                     return
 
-            # Also quit if the drone controller wants us to do so.
-            if drone_controller.should_quit():
+            # Also quit if the drone controller has finished.
+            if drone_controller.has_finished():
                 return
 
             # Get the drone's image and poses.
