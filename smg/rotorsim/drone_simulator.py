@@ -227,9 +227,8 @@ class DroneSimulator:
                 self.__should_terminate.set()
 
             # If the drone controller exists, destroy it.
-            # TODO
-            # if self.__drone_controller is not None:
-            #     self.__drone_controller.terminate()
+            if self.__drone_controller is not None:
+                self.__drone_controller.terminate()
 
             # If the simulated drone exists, destroy it.
             if self.__drone is not None:
