@@ -292,6 +292,9 @@ class DroneSimulator:
             elif self.__scene_octree is not None:
                 OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
 
+            # Render the UI for the drone controller.
+            self.__drone_controller.render_ui()
+
             # If we're in third-person mode:
             if self.__third_person:
                 # Render the mesh for the drone (at its current pose), blending it over the rest of the scene.
