@@ -144,7 +144,7 @@ class DroneSimulator:
 
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
-            CameraUtil.make_default_camera(), canonical_angular_speed=0.05, canonical_linear_speed=0.025
+            CameraUtil.make_default_camera(), canonical_angular_speed=0.05, canonical_linear_speed=0.075
         )
 
         # Construct the drone controller.
