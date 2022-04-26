@@ -14,7 +14,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from smg.meshing import MeshUtil
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
-from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
+from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapPicker, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
@@ -152,9 +152,9 @@ class DroneSimulator:
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
-                debug=True, drone=self.__drone, intrinsics=self.__intrinsics, planning_octree=self.__planning_octree,
-                scene_octree=self.__scene_octree, viewing_camera=camera_controller.get_camera(),
-                window_size=(width // 2, height)
+                debug=True, drone=self.__drone,
+                picker=OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics),
+                planning_octree=self.__planning_octree, viewing_camera=camera_controller.get_camera()
             )
         }
 
