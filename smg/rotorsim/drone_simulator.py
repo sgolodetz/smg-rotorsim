@@ -13,6 +13,7 @@ from timeit import default_timer as timer
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from smg.meshing import MeshUtil
+from smg.navigation import OCS_OCCUPIED, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
 from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapPicker, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
@@ -60,11 +61,13 @@ class DroneSimulator:
         self.__octree_drawer: Optional[OcTreeDrawer] = None
         self.__planning_octree: Optional[OcTree] = None
         self.__planning_octree_filename: Optional[str] = planning_octree_filename
+        self.__planning_toolkit: Optional[PlanningToolkit] = None
         self.__should_terminate: threading.Event = threading.Event()
         self.__scene_mesh: Optional[OpenGLTriMesh] = None
         self.__scene_mesh_filename: Optional[str] = scene_mesh_filename
         self.__scene_octree: Optional[OcTree] = None
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
+        self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
         self.__third_person: bool = False
         self.__window_size: Tuple[int, int] = window_size
@@ -111,11 +114,18 @@ class DroneSimulator:
         self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
         self.__drone_mesh_o3d = None
 
-        # Load in any octree that has been provided for path planning.
+        # Load in any octree that has been provided for path planning, and construct the planning toolkit if possible.
         if self.__planning_octree_filename is not None:
             planning_voxel_size: float = 0.1
             self.__planning_octree = OcTree(planning_voxel_size)
             self.__planning_octree.read_binary(self.__planning_octree_filename)
+
+            # Construct the planning toolkit.
+            self.__planning_toolkit = PlanningToolkit(
+                self.__planning_octree,
+                neighbours=PlanningToolkit.neighbours6,
+                node_is_free=lambda n: self.__planning_toolkit.occupancy_status(n) != OCS_OCCUPIED
+            )
 
         # Load in any mesh that has been provided for the scene.
         if self.__scene_mesh_filename is not None:
@@ -123,21 +133,27 @@ class DroneSimulator:
                 o3d.io.read_triangle_mesh(self.__scene_mesh_filename)
             )
 
-        # Load in any octree that has been provided for the scene.
+        # Load in any octree that has been provided for the scene, and construct a picker for it if it's available.
+        width, height = self.__window_size
         if self.__scene_octree_filename is not None:
             scene_voxel_size: float = 0.05
             self.__scene_octree = OcTree(scene_voxel_size)
             self.__scene_octree.read_binary(self.__scene_octree_filename)
+            self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
 
         # Load in the "drone flying" sound, and note that the music isn't initially playing.
         pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
         music_playing: bool = False
 
         # Construct the simulated drone.
-        width, height = self.__window_size
         self.__drone = SimulatedDrone(
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
+
+        # FIXME: This is a quick test.
+        if self.__scene_octree_picker is not None:
+            from .octomap_landing_controller import OctomapLandingController
+            self.__drone.set_landing_controller(OctomapLandingController(self.__planning_toolkit))
 
         # FIXME: This is only used for the RTS-style drone controller.
         self.__drone.takeoff()
@@ -152,9 +168,8 @@ class DroneSimulator:
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
-                debug=True, drone=self.__drone,
-                picker=OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics),
-                planning_octree=self.__planning_octree, viewing_camera=camera_controller.get_camera()
+                debug=True, drone=self.__drone, picker=self.__scene_octree_picker,
+                planning_toolkit=self.__planning_toolkit, viewing_camera=camera_controller.get_camera()
             )
         }
 
