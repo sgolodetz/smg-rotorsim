@@ -38,7 +38,7 @@ class OctomapLandingController:
             test_vpos: np.ndarray = self.__planning_toolkit.pos_to_vpos(master_cam.p())
             test_node: PathNode = self.__planning_toolkit.pos_to_node(test_vpos)
             while self.__planning_toolkit.node_is_traversable(
-                test_node, neighbours=PlanningToolkit.neighbours4, use_clearance=True
+                test_node, neighbours=PlanningToolkit.neighbours8, use_clearance=True
             ):
                 if not self.__planning_toolkit.point_is_in_bounds(test_vpos):
                     self.__goal_y = None
@@ -46,6 +46,11 @@ class OctomapLandingController:
 
                 test_vpos[1] += resolution
                 test_node = self.__planning_toolkit.pos_to_node(test_vpos)
+
+            for neighbour_node in PlanningToolkit.neighbours8(test_node):
+                if self.__planning_toolkit.node_is_free(neighbour_node):
+                    self.__goal_y = None
+                    return SimulatedDrone.FLYING
 
             self.__goal_y = test_vpos[1] - resolution
 
