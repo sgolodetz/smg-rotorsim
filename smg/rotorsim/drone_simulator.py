@@ -24,6 +24,8 @@ from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
+from .octomap_landing_controller import OctomapLandingController
+from .octomap_takeoff_controller import OctomapTakeoffController
 from .scene_renderer import SceneRenderer
 
 
@@ -114,13 +116,14 @@ class DroneSimulator:
         self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
         self.__drone_mesh_o3d = None
 
-        # Load in any octree that has been provided for path planning, and construct the planning toolkit if possible.
+        # If an octree has been provided for path planning:
         if self.__planning_octree_filename is not None:
+            # Load in the octree.
             planning_voxel_size: float = 0.1
             self.__planning_octree = OcTree(planning_voxel_size)
             self.__planning_octree.read_binary(self.__planning_octree_filename)
 
-            # Construct the planning toolkit.
+            # Construct a planning toolkit to plan paths over the octree.
             self.__planning_toolkit = PlanningToolkit(
                 self.__planning_octree,
                 neighbours=PlanningToolkit.neighbours6,
@@ -150,10 +153,11 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
-        # FIXME: This is a quick test.
-        if self.__scene_octree_picker is not None:
-            from .octomap_landing_controller import OctomapLandingController
+        # If an octree is available for path planning, replace the default landing and takeoff controllers for the
+        # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
+        if self.__planning_toolkit is not None:
             self.__drone.set_landing_controller(OctomapLandingController(self.__planning_toolkit))
+            self.__drone.set_takeoff_controller(OctomapTakeoffController(self.__planning_toolkit))
 
         # FIXME: This is only used for the RTS-style drone controller.
         self.__drone.takeoff()
