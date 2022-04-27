@@ -156,8 +156,12 @@ class DroneSimulator:
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
         # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
         if self.__planning_toolkit is not None:
-            self.__drone.set_landing_controller(OctomapLandingController(self.__planning_toolkit))
-            self.__drone.set_takeoff_controller(OctomapTakeoffController(self.__planning_toolkit))
+            self.__drone.set_landing_controller(
+                OctomapLandingController(self.__planning_toolkit, linear_gain=self.__drone.linear_gain)
+            )
+            self.__drone.set_takeoff_controller(
+                OctomapTakeoffController(self.__planning_toolkit, linear_gain=self.__drone.linear_gain)
+            )
 
         # FIXME: This is only used for the RTS-style drone controller.
         self.__drone.takeoff()
