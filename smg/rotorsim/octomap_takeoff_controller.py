@@ -19,14 +19,20 @@ class OctomapTakeoffController:
 
     # SPECIAL METHODS
 
-    def __call__(self, master_cam: SimpleCamera) -> SimulatedDrone.EState:
+    def __call__(self, drone_cur: SimpleCamera) -> SimulatedDrone.EState:
+        """
+        TODO
+
+        :param drone_cur:   A camera corresponding to the drone's current pose.
+        :return:            The state of the drone after this iteration of the controller.
+        """
         if self.__goal_y is None:
-            self.__goal_y = master_cam.p()[1] - self.__target_height
+            self.__goal_y = drone_cur.p()[1] - self.__target_height
 
             # TODO: Choose a height that will make sure that the drone doesn't end up in a wall.
 
-        if master_cam.p()[1] > self.__goal_y:
-            master_cam.move_v(self.__linear_gain * 0.5)
+        if drone_cur.p()[1] > self.__goal_y:
+            drone_cur.move_v(self.__linear_gain * 0.5)
             return SimulatedDrone.TAKING_OFF
         else:
             self.__goal_y = None

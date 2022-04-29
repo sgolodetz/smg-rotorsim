@@ -17,8 +17,8 @@ class OctomapLandingController:
         """
         TODO
 
-        :param linear_gain:         TODO
-        :param planning_toolkit:    TODO
+        :param planning_toolkit:    The planning toolkit (used for traversability checking).
+        :param linear_gain:         The amount by which control inputs will be multiplied for linear drone movements.
         """
         self.__goal_y: Optional[float] = None
         self.__linear_gain: float = linear_gain
@@ -26,16 +26,16 @@ class OctomapLandingController:
 
     # SPECIAL METHODS
 
-    def __call__(self, master_cam: SimpleCamera) -> SimulatedDrone.EState:
+    def __call__(self, drone_cur: SimpleCamera) -> SimulatedDrone.EState:
         """
         TODO
 
-        :param master_cam:  TODO
-        :return:            TODO
+        :param drone_cur:   A camera corresponding to the drone's current pose.
+        :return:            The state of the drone after this iteration of the controller.
         """
         if self.__goal_y is None:
             resolution: float = self.__planning_toolkit.get_tree().get_resolution()
-            test_vpos: np.ndarray = self.__planning_toolkit.pos_to_vpos(master_cam.p())
+            test_vpos: np.ndarray = self.__planning_toolkit.pos_to_vpos(drone_cur.p())
             test_node: PathNode = self.__planning_toolkit.pos_to_node(test_vpos)
             while self.__planning_toolkit.node_is_traversable(
                 test_node, neighbours=PlanningToolkit.neighbours8, use_clearance=True
@@ -54,8 +54,8 @@ class OctomapLandingController:
 
             self.__goal_y = test_vpos[1] - resolution
 
-        if master_cam.p()[1] < self.__goal_y:
-            master_cam.move_v(-self.__linear_gain * 0.5)
+        if drone_cur.p()[1] < self.__goal_y:
+            drone_cur.move_v(-self.__linear_gain * 0.5)
             return SimulatedDrone.LANDING
         else:
             self.__goal_y = None
