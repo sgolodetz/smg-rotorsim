@@ -40,7 +40,7 @@ class OctomapLandingController:
             while self.__planning_toolkit.node_is_traversable(
                 test_node, neighbours=PlanningToolkit.neighbours8, use_clearance=True
             ):
-                if not self.__planning_toolkit.point_is_in_bounds(test_vpos):
+                if not self.__planning_toolkit.is_in_bounds(test_vpos):
                     self.__goal_y = None
                     return SimulatedDrone.FLYING
 
