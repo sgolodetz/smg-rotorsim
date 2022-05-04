@@ -5,7 +5,6 @@ import os
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
-
 import threading
 
 from OpenGL.GL import *
@@ -90,12 +89,12 @@ class DroneSimulator:
 
     def run(self) -> None:
         """Run the drone simulator."""
-        # Initialise pygame and some of its modules.
+        # Initialise PyGame and some of its modules.
         pygame.init()
         pygame.joystick.init()
         pygame.mixer.init()
 
-        # Make sure pygame always gets the user inputs.
+        # Make sure PyGame always gets the user inputs.
         pygame.event.set_grab(True)
 
         # Create the window.
@@ -119,9 +118,7 @@ class DroneSimulator:
         # If an octree has been provided for path planning:
         if self.__planning_octree_filename is not None:
             # Load in the octree.
-            planning_voxel_size: float = 0.1
-            self.__planning_octree = OcTree(planning_voxel_size)
-            self.__planning_octree.read_binary(self.__planning_octree_filename)
+            self.__planning_octree = OctomapUtil.load_octree(self.__planning_octree_filename)
 
             # Construct a planning toolkit to plan paths over the octree.
             self.__planning_toolkit = PlanningToolkit(
@@ -139,9 +136,7 @@ class DroneSimulator:
         # Load in any octree that has been provided for the scene, and construct a picker for it if it's available.
         width, height = self.__window_size
         if self.__scene_octree_filename is not None:
-            scene_voxel_size: float = 0.05
-            self.__scene_octree = OcTree(scene_voxel_size)
-            self.__scene_octree.read_binary(self.__scene_octree_filename)
+            self.__scene_octree = OctomapUtil.load_octree(self.__scene_octree_filename)
             self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
 
         # Load in the "drone flying" sound, and note that the music isn't initially playing.
