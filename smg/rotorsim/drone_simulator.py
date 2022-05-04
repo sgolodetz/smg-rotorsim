@@ -1,28 +1,30 @@
+import cv2
 import numpy as np
 import open3d as o3d
 import os
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
-
 import threading
-import time
 
 from OpenGL.GL import *
 from timeit import default_timer as timer
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from smg.joysticks import FutabaT6K
 from smg.meshing import MeshUtil
-from smg.navigation import AStarPathPlanner, OCS_OCCUPIED, Path, PlanningToolkit
+from smg.navigation import OCS_OCCUPIED, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
-from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapUtil, OcTree, OcTreeDrawer
+from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapPicker, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
+from smg.rotorcontrol import DroneControllerFactory
+from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import SimulatedDrone
 from smg.utility import ImageUtil
 
+from .octomap_landing_controller import OctomapLandingController
+from .octomap_takeoff_controller import OctomapTakeoffController
 from .scene_renderer import SceneRenderer
 
 
@@ -31,17 +33,17 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_mesh: o3d.geometry.TriangleMesh,
-                 intrinsics: Tuple[float, float, float, float], plan_paths: bool = False,
-                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
-                 scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
+    def __init__(self, *, debug: bool = False, drone_controller_type: str, drone_mesh: o3d.geometry.TriangleMesh,
+                 intrinsics: Tuple[float, float, float, float], planning_octree_filename: Optional[str],
+                 scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
+                 window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
         :param debug:                       Whether to print out debugging messages.
+        :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
-        :param plan_paths:                  Whether to perform path planning or not.
         :param planning_octree_filename:    The name of a file containing an octree for path planning (optional).
         :param scene_mesh_filename:         The name of a file containing a mesh for the scene (optional).
         :param scene_octree_filename:       The name of a file containing an octree for the scene (optional).
@@ -51,12 +53,14 @@ class DroneSimulator:
 
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
+        self.__drone_controller: Optional[DroneController] = None
+        self.__drone_controller_type: str = drone_controller_type
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
         self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
         self.__octree_drawer: Optional[OcTreeDrawer] = None
-        self.__plan_paths: bool = plan_paths
+        self.__planning_octree: Optional[OcTree] = None
         self.__planning_octree_filename: Optional[str] = planning_octree_filename
         self.__planning_toolkit: Optional[PlanningToolkit] = None
         self.__should_terminate: threading.Event = threading.Event()
@@ -64,29 +68,10 @@ class DroneSimulator:
         self.__scene_mesh_filename: Optional[str] = scene_mesh_filename
         self.__scene_octree: Optional[OcTree] = None
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
+        self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
         self.__third_person: bool = False
         self.__window_size: Tuple[int, int] = window_size
-
-        # The path planning variables, together with their lock.
-        self.__current_pos: Optional[np.ndarray] = None
-        self.__interpolated_path: Optional[Path] = None
-        self.__path: Optional[Path] = None
-        self.__planning_lock: threading.Lock = threading.Lock()
-
-        # FIXME: These shouldn't be hard-coded.
-        voxel_size: float = 0.05
-        self.__waypoints: List[np.ndarray] = [
-            # np.array([0.5, 0.5, 5.5]) * voxel_size,
-            # np.array([-5.5, 10.5, 15.5]) * voxel_size,
-            np.array([30.5, 5.5, 5.5]) * voxel_size,
-            # np.array([50.5, 0.5, 20.5]) * voxel_size
-        ]
-
-        # The threads and conditions.
-        self.__planning_thread: Optional[threading.Thread] = None
-        self.__planning_is_needed: bool = False
-        self.__planning_needed: threading.Condition = threading.Condition(self.__planning_lock)
 
         self.__alive = True
 
@@ -104,26 +89,13 @@ class DroneSimulator:
 
     def run(self) -> None:
         """Run the drone simulator."""
-        # Initialise pygame and some of its modules.
+        # Initialise PyGame and some of its modules.
         pygame.init()
         pygame.joystick.init()
         pygame.mixer.init()
 
-        # Make sure pygame always gets the user inputs.
+        # Make sure PyGame always gets the user inputs.
         pygame.event.set_grab(True)
-
-        # Try to determine the joystick index of the Futaba T6K. If no joystick is plugged in, early out.
-        joystick_count: int = pygame.joystick.get_count()
-        joystick_idx: int = 0
-        if joystick_count == 0:
-            exit(0)
-        elif joystick_count != 1:
-            # TODO: Prompt the user for the joystick to use.
-            pass
-
-        # Construct and calibrate the Futaba T6K.
-        joystick: FutabaT6K = FutabaT6K(joystick_idx)
-        joystick.calibrate()
 
         # Create the window.
         pygame.display.set_mode(self.__window_size, pygame.DOUBLEBUF | pygame.OPENGL)
@@ -143,59 +115,78 @@ class DroneSimulator:
         self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
         self.__drone_mesh_o3d = None
 
-        # Load in any mesh that has been provided for the scene.
+        # Try to load in any octree that has been provided for path planning, and construct a planning toolkit
+        # for it if it's available.
+        if self.__planning_octree_filename is not None:
+            self.__planning_octree = OctomapUtil.load_octree(self.__planning_octree_filename)
+            if self.__planning_octree is not None:
+                self.__planning_toolkit = PlanningToolkit(
+                    self.__planning_octree,
+                    neighbours=PlanningToolkit.neighbours6,
+                    node_is_free=lambda n: self.__planning_toolkit.occupancy_status(n) != OCS_OCCUPIED
+                )
+
+        # Try to load in any mesh that has been provided for the scene.
         if self.__scene_mesh_filename is not None:
             self.__scene_mesh = MeshUtil.convert_trimesh_to_opengl(
                 o3d.io.read_triangle_mesh(self.__scene_mesh_filename)
             )
 
-        # Load in any octree that has been provided for the scene.
+        # Try to load in any octree that has been provided for the scene, and construct a picker for it if
+        # it's available.
+        width, height = self.__window_size
         if self.__scene_octree_filename is not None:
-            scene_voxel_size: float = 0.05
-            self.__scene_octree = OcTree(scene_voxel_size)
-            self.__scene_octree.read_binary(self.__scene_octree_filename)
+            self.__scene_octree = OctomapUtil.load_octree(self.__scene_octree_filename)
+            if self.__scene_octree is not None:
+                self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
 
-        # Load in the "drone flying" sound.
+        # Load in the "drone flying" sound, and note that the music isn't initially playing.
         pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
+        music_playing: bool = False
 
         # Construct the simulated drone.
-        width, height = self.__window_size
         self.__drone = SimulatedDrone(
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
+        # If an octree is available for path planning, replace the default landing and takeoff controllers for the
+        # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
+        if self.__planning_toolkit is not None:
+            self.__drone.set_landing_controller(
+                OctomapLandingController(self.__planning_toolkit, linear_gain=self.__drone.linear_gain)
+            )
+            self.__drone.set_takeoff_controller(
+                OctomapTakeoffController(self.__planning_toolkit, linear_gain=self.__drone.linear_gain)
+            )
+
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
-            CameraUtil.make_default_camera(), canonical_angular_speed=0.05, canonical_linear_speed=0.025
+            CameraUtil.make_default_camera(), canonical_angular_speed=0.05, canonical_linear_speed=0.075
         )
 
-        # If we're planning paths, start the path planning thread.
-        if self.__plan_paths and self.__planning_octree_filename is not None:
-            self.__planning_thread = threading.Thread(target=self.__run_planning)
-            self.__planning_thread.start()
+        # Construct the drone controller.
+        kwargs: Dict[str, dict] = {
+            "futaba_t6k": dict(drone=self.__drone),
+            "keyboard": dict(drone=self.__drone),
+            "rts": dict(
+                debug=True, drone=self.__drone, picker=self.__scene_octree_picker,
+                planning_toolkit=self.__planning_toolkit, viewing_camera=camera_controller.get_camera()
+            )
+        }
 
-        # Prevent the drone's gimbal from being moved until we're ready.
-        can_move_gimbal: bool = False
+        self.__drone_controller = DroneControllerFactory.make_drone_controller(
+            self.__drone_controller_type, **kwargs[self.__drone_controller_type]
+        )
 
         # Until the simulator should terminate:
         while not self.__should_terminate.is_set():
             # Process any PyGame events.
+            events: List[pygame.event.Event] = []
             for event in pygame.event.get():
-                if event.type == pygame.JOYBUTTONDOWN:
-                    # If Button 0 on the Futaba T6K is set to its "pressed" state:
-                    if event.button == 0:
-                        # Start playing the "drone flying" sound.
-                        if self.__drone.get_state() == SimulatedDrone.IDLE:
-                            pygame.mixer.music.play(loops=-1)
+                # Record the event for later use by the drone controller.
+                events.append(event)
 
-                        # Tell the drone to take off.
-                        self.__drone.takeoff()
-                elif event.type == pygame.JOYBUTTONUP:
-                    # If Button 0 on the Futaba T6K is set to its "released" state:
-                    if event.button == 0:
-                        # Tell the drone to land.
-                        self.__drone.land()
-                elif event.type == pygame.KEYDOWN:
+                if event.type == pygame.KEYDOWN:
                     # If the user presses the 't' key:
                     if event.key == pygame.K_t:
                         # Toggle the third-person view.
@@ -204,49 +195,28 @@ class DroneSimulator:
                     # If the user wants us to quit, do so.
                     return
 
-            # Also quit if both Button 0 and Button 1 on the Futaba T6K are set to their "released" state.
-            if joystick.get_button(0) == 0 and joystick.get_button(1) == 0:
+            # Also quit if the drone controller has finished.
+            if self.__drone_controller.has_finished():
                 return
-
-            # If the drone is in the idle state, make sure the "drone flying" sound is stopped.
-            if self.__drone.get_state() == SimulatedDrone.IDLE:
-                pygame.mixer.music.stop()
-
-            # Update the movement of the drone based on the pitch, roll and yaw values output by the Futaba T6K.
-            self.__drone.move_forward(joystick.get_pitch())
-            self.__drone.turn(joystick.get_yaw())
-
-            if joystick.get_button(1) == 0:
-                self.__drone.move_right(0)
-                self.__drone.move_up(joystick.get_roll())
-            else:
-                self.__drone.move_right(joystick.get_roll())
-                self.__drone.move_up(0)
-
-            # If the throttle goes above half-way, enable movement of the drone's gimbal from now on.
-            throttle: float = joystick.get_throttle()
-            if throttle >= 0.5:
-                can_move_gimbal = True
-
-            # If the drone's gimbal can be moved, update its pitch based on the current value of the throttle.
-            # Note that the throttle value is in [0,1], so we rescale it to a value in [-1,1] as a first step.
-            if can_move_gimbal:
-                self.__drone.update_gimbal_pitch(2 * (joystick.get_throttle() - 0.5))
 
             # Get the drone's image and poses.
             drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
 
-            # If the drone is flying, provide the path planner with the current position of the drone, and tell it
-            # that some path planning is needed.
-            acquired: bool = self.__planning_lock.acquire(blocking=False)
-            if acquired:
-                try:
-                    if self.__drone.get_state() == SimulatedDrone.FLYING:
-                        self.__current_pos = drone_camera_w_t_c[0:3, 3]
-                        self.__planning_is_needed = True
-                        self.__planning_needed.notify()
-                finally:
-                    self.__planning_lock.release()
+            # Allow the user to control the drone.
+            self.__drone_controller.iterate(
+                events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics(),
+                tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
+            )
+
+            # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
+            if self.__drone.get_state() != SimulatedDrone.IDLE and not music_playing:
+                pygame.mixer.music.play(loops=-1)
+                music_playing = True
+
+            # If the drone is in the idle state and the "drone flying" sound is playing, stop it.
+            if self.__drone.get_state() == SimulatedDrone.IDLE and music_playing:
+                pygame.mixer.music.stop()
+                music_playing = False
 
             # Get the keys that are currently being pressed by the user.
             pressed_keys: Sequence[bool] = pygame.key.get_pressed()
@@ -272,9 +242,9 @@ class DroneSimulator:
             if not self.__should_terminate.is_set():
                 self.__should_terminate.set()
 
-            # Join any running threads.
-            if self.__planning_thread is not None:
-                self.__planning_thread.join()
+            # If the drone controller exists, destroy it.
+            if self.__drone_controller is not None:
+                self.__drone_controller.terminate()
 
             # If the simulated drone exists, destroy it.
             if self.__drone is not None:
@@ -288,8 +258,9 @@ class DroneSimulator:
             if self.__gl_image_renderer is not None:
                 self.__gl_image_renderer.terminate()
 
-            # Shut down pygame.
+            # Shut down pygame and close any remaining OpenCV windows.
             pygame.quit()
+            cv2.destroyAllWindows()
 
             self.__alive = False
 
@@ -337,21 +308,8 @@ class DroneSimulator:
             elif self.__scene_octree is not None:
                 OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
 
-            # If a path has been planned, draw it.
-            acquired: bool = self.__planning_lock.acquire(blocking=False)
-            if acquired:
-                try:
-                    if self.__path is not None:
-                        self.__path.render(
-                            start_colour=(0, 1, 1), end_colour=(0, 1, 1), width=5,
-                            waypoint_colourer=self.__planning_toolkit.occupancy_colourer()
-                        )
-                        # self.__interpolated_path.render(
-                        #     start_colour=(1, 1, 0), end_colour=(1, 0, 1), width=5,
-                        #     waypoint_colourer=None
-                        # )
-                finally:
-                    self.__planning_lock.release()
+            # Render the UI for the drone controller.
+            self.__drone_controller.render_ui()
 
             # If we're in third-person mode:
             if self.__third_person:
@@ -414,21 +372,8 @@ class DroneSimulator:
                 with OpenGLMatrixContext(GL_MODELVIEW, lambda: OpenGLUtil.mult_matrix(drone_chassis_w_t_c)):
                     SceneRenderer.render(lambda: self.__drone_mesh.render(), use_backface_culling=True)
 
-                # If a path has been planned, draw it.
-                acquired: bool = self.__planning_lock.acquire(blocking=False)
-                if acquired:
-                    try:
-                        if self.__path is not None:
-                            self.__path.render(
-                                start_colour=(0, 1, 1), end_colour=(0, 1, 1), width=5,
-                                waypoint_colourer=self.__planning_toolkit.occupancy_colourer()
-                            )
-                            # self.__interpolated_path.render(
-                            #     start_colour=(1, 1, 0), end_colour=(1, 0, 1), width=5,
-                            #     waypoint_colourer=None
-                            # )
-                    finally:
-                        self.__planning_lock.release()
+                # Render the UI for the drone controller.
+                self.__drone_controller.render_ui()
 
         glPopAttrib()
 
@@ -438,89 +383,3 @@ class DroneSimulator:
 
         # Swap the front and back buffers.
         pygame.display.flip()
-
-    def __run_planning(self) -> None:
-        """Run the path planning thread."""
-        # Load the planning octree.
-        voxel_size: float = 0.1
-        octree: OcTree = OcTree(voxel_size)
-        octree.read_binary(self.__planning_octree_filename)
-
-        # Construct the planning toolkit.
-        self.__planning_toolkit = PlanningToolkit(
-            octree,
-            neighbours=PlanningToolkit.neighbours6,
-            node_is_free=lambda n: self.__planning_toolkit.occupancy_status(n) != OCS_OCCUPIED
-        )
-
-        # Construct the path planner.
-        planner: AStarPathPlanner = AStarPathPlanner(self.__planning_toolkit, debug=False)
-
-        # Until the simulator should terminate:
-        while not self.__should_terminate.is_set():
-            # Wait until path planning is required, and then capture the shared variables locally so that we
-            # can use them without having to hold on to the lock. Note that we copy the current position, as
-            # the shared variable may be modified during path planning, but we don't need to copy things like
-            # the paths and the waypoints, since the only thread that ever writes to them is this one.
-            with self.__planning_lock:
-                while not self.__planning_is_needed:
-                    self.__planning_needed.wait(0.1)
-                    if self.__should_terminate.is_set():
-                        return
-
-                current_pos: Optional[np.ndarray] = self.__current_pos.copy()
-                interpolated_path: Optional[Path] = self.__interpolated_path
-                path: Optional[Path] = self.__path
-                waypoints: List[np.ndarray] = self.__waypoints
-
-            # If no path has yet been planned through the waypoints, plan one now. Otherwise, if a path already
-            # exists, update it based on the agent's current position.
-            ay: float = 10
-            if path is None:
-                if self.__debug:
-                    start = timer()
-
-                path = planner.plan_multi_step_path(
-                    [current_pos] + waypoints,
-                    d=PlanningToolkit.l1_distance(ay=ay), h=PlanningToolkit.l1_distance(ay=ay),
-                    allow_shortcuts=True, pull_strings=True, use_clearance=True
-                )
-
-                if self.__debug:
-                    end = timer()
-                    # noinspection PyUnboundLocalVariable
-                    print(f"Path Planning: {end - start}s")
-            elif len(path) > 1:
-                if self.__debug:
-                    start = timer()
-
-                path = planner.update_path(
-                    current_pos, path, debug=True,
-                    d=PlanningToolkit.l1_distance(ay=ay), h=PlanningToolkit.l1_distance(ay=ay),
-                    allow_shortcuts=True, pull_strings=True, use_clearance=True
-                )
-
-                if self.__debug:
-                    end = timer()
-                    print(f"Path Updating: {end - start}s")
-
-            # Perform curve fitting and interpolation on any path found.
-            if path is not None:
-                if self.__debug:
-                    start = timer()
-
-                interpolated_path = path.interpolate()
-
-                if self.__debug:
-                    end = timer()
-                    print(f"Path Interpolation: {end - start}s")
-
-            # Update the shared path variables so that the new path and its interpolated variant can be picked up
-            # by other threads.
-            with self.__planning_lock:
-                self.__interpolated_path = interpolated_path
-                self.__path = path
-                self.__planning_is_needed = False
-
-            # Wait for 10ms before performing any further path planning, so as to avoid a spin loop.
-            time.sleep(0.01)
