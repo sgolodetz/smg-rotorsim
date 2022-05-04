@@ -163,9 +163,6 @@ class DroneSimulator:
                 OctomapTakeoffController(self.__planning_toolkit, linear_gain=self.__drone.linear_gain)
             )
 
-        # FIXME: This is only used for the RTS-style drone controller.
-        self.__drone.takeoff()
-
         # Construct the camera controller.
         camera_controller: KeyboardCameraController = KeyboardCameraController(
             CameraUtil.make_default_camera(), canonical_angular_speed=0.05, canonical_linear_speed=0.075
