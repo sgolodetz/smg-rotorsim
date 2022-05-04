@@ -115,29 +115,30 @@ class DroneSimulator:
         self.__drone_mesh = MeshUtil.convert_trimesh_to_opengl(self.__drone_mesh_o3d)
         self.__drone_mesh_o3d = None
 
-        # If an octree has been provided for path planning:
+        # Try to load in any octree that has been provided for path planning, and construct a planning toolkit
+        # for it if it's available.
         if self.__planning_octree_filename is not None:
-            # Load in the octree.
             self.__planning_octree = OctomapUtil.load_octree(self.__planning_octree_filename)
+            if self.__planning_octree is not None:
+                self.__planning_toolkit = PlanningToolkit(
+                    self.__planning_octree,
+                    neighbours=PlanningToolkit.neighbours6,
+                    node_is_free=lambda n: self.__planning_toolkit.occupancy_status(n) != OCS_OCCUPIED
+                )
 
-            # Construct a planning toolkit to plan paths over the octree.
-            self.__planning_toolkit = PlanningToolkit(
-                self.__planning_octree,
-                neighbours=PlanningToolkit.neighbours6,
-                node_is_free=lambda n: self.__planning_toolkit.occupancy_status(n) != OCS_OCCUPIED
-            )
-
-        # Load in any mesh that has been provided for the scene.
+        # Try to load in any mesh that has been provided for the scene.
         if self.__scene_mesh_filename is not None:
             self.__scene_mesh = MeshUtil.convert_trimesh_to_opengl(
                 o3d.io.read_triangle_mesh(self.__scene_mesh_filename)
             )
 
-        # Load in any octree that has been provided for the scene, and construct a picker for it if it's available.
+        # Try to load in any octree that has been provided for the scene, and construct a picker for it if
+        # it's available.
         width, height = self.__window_size
         if self.__scene_octree_filename is not None:
             self.__scene_octree = OctomapUtil.load_octree(self.__scene_octree_filename)
-            self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
+            if self.__scene_octree is not None:
+                self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
 
         # Load in the "drone flying" sound, and note that the music isn't initially playing.
         pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
