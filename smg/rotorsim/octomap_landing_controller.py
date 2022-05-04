@@ -65,7 +65,8 @@ class OctomapLandingController:
             # landing spot. (Note that y points downwards in our coordinate system!)
             self.__goal_y = test_vpos[1] - resolution
 
-        # If the height of the drone is above the goal height, tell the drone to move downwards. If not, it's landed.
+        # If the height of the drone is above the goal height, tell the drone to move downwards. If not, the landing
+        # has finished.
         if drone_cur.p()[1] < self.__goal_y:
             drone_cur.move_v(-self.__linear_gain * 0.5)
             return SimulatedDrone.LANDING
