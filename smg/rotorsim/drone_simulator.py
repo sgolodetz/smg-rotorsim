@@ -169,7 +169,7 @@ class DroneSimulator:
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
-                debug=True, drone=self.__drone, picker=self.__scene_octree_picker,
+                debug=False, drone=self.__drone, picker=self.__scene_octree_picker,
                 planning_toolkit=self.__planning_toolkit, viewing_camera=camera_controller.get_camera()
             )
         }
