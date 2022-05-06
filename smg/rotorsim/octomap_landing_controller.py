@@ -2,7 +2,7 @@ import numpy as np
 
 from typing import Optional
 
-from smg.navigation import PathNode, PlanningToolkit
+from smg.navigation import PlanningToolkit
 from smg.rigging.cameras import SimpleCamera
 from smg.rotory.drones import SimulatedDrone
 
@@ -35,35 +35,18 @@ class OctomapLandingController:
         """
         # If there is no landing currently in progress:
         if self.__goal_y is None:
-            # Perform a downwards search from the current position of the drone to find the ground.
-            resolution: float = self.__planning_toolkit.get_tree().get_resolution()
+            # Try to find a patch of flat ground below the current position of the drone.
+            ground_vpos: Optional[np.ndarray] = self.__planning_toolkit.find_flat_ground_below(drone_cur.p())
 
-            test_vpos: np.ndarray = self.__planning_toolkit.pos_to_vpos(drone_cur.p())
-            test_node: PathNode = self.__planning_toolkit.pos_to_node(test_vpos)
+            # If that succeeds, set the goal height to that of the centre of the voxel just above the ground.
+            # (Note that y points downwards in our coordinate system!)
+            if ground_vpos is not None:
+                self.__goal_y = ground_vpos[1] - self.__planning_toolkit.get_tree().get_resolution()
 
-            # Step downwards a voxel at a time until the node being tested is non-traversable.
-            while self.__planning_toolkit.node_is_traversable(
-                test_node, neighbours=PlanningToolkit.neighbours8, use_clearance=True
-            ):
-                # If we've stepped outside the bounds of the octree, cancel the landing.
-                if not self.__planning_toolkit.is_in_bounds(test_vpos):
-                    self.__goal_y = None
-                    return SimulatedDrone.FLYING
-
-                # Otherwise, keep stepping downwards.
-                test_vpos[1] += resolution
-                test_node = self.__planning_toolkit.pos_to_node(test_vpos)
-
-            # Once we've found the ground, check that the landing spot is sufficiently flat. If it isn't,
-            # cancel the landing.
-            for neighbour_node in PlanningToolkit.neighbours8(test_node):
-                if self.__planning_toolkit.node_is_free(neighbour_node):
-                    self.__goal_y = None
-                    return SimulatedDrone.FLYING
-
-            # If we get this far, set the goal height to that of the centre of the voxel just above the
-            # landing spot. (Note that y points downwards in our coordinate system!)
-            self.__goal_y = test_vpos[1] - resolution
+            # Otherwise, clear the goal height and cancel the landing.
+            else:
+                self.__goal_y = None
+                return SimulatedDrone.FLYING
 
         # If the height of the drone is above the goal height, tell the drone to move downwards. If not, the landing
         # has finished.
