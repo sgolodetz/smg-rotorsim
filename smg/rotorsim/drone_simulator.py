@@ -20,7 +20,7 @@ from smg.rigging.controllers import KeyboardCameraController
 from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotorcontrol import DroneControllerFactory
 from smg.rotorcontrol.controllers import DroneController
-from smg.rotory.drones import SimulatedDrone
+from smg.rotory.drones import Drone, SimulatedDrone
 from smg.utility import ImageUtil
 
 from .octomap_landing_controller import OctomapLandingController
@@ -209,12 +209,12 @@ class DroneSimulator:
             )
 
             # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
-            if self.__drone.get_state() != SimulatedDrone.IDLE and not music_playing:
+            if self.__drone.get_state() != Drone.IDLE and not music_playing:
                 pygame.mixer.music.play(loops=-1)
                 music_playing = True
 
             # If the drone is in the idle state and the "drone flying" sound is playing, stop it.
-            if self.__drone.get_state() == SimulatedDrone.IDLE and music_playing:
+            if self.__drone.get_state() == Drone.IDLE and music_playing:
                 pygame.mixer.music.stop()
                 music_playing = False
 

@@ -2,7 +2,7 @@ from typing import Optional
 
 from smg.navigation import PlanningToolkit
 from smg.rigging.cameras import SimpleCamera
-from smg.rotory.drones import SimulatedDrone
+from smg.rotory.drones import Drone
 
 
 # noinspection SpellCheckingInspection
@@ -26,7 +26,7 @@ class OctomapTakeoffController:
 
     # SPECIAL METHODS
 
-    def __call__(self, drone_cur: SimpleCamera) -> SimulatedDrone.EState:
+    def __call__(self, drone_cur: SimpleCamera) -> Drone.EState:
         """
         Run an iteration of the takeoff controller.
 
@@ -45,7 +45,7 @@ class OctomapTakeoffController:
         # has finished.
         if drone_cur.p()[1] > self.__goal_y:
             drone_cur.move_v(self.__linear_gain * 0.5)
-            return SimulatedDrone.TAKING_OFF
+            return Drone.TAKING_OFF
         else:
             self.__goal_y = None
-            return SimulatedDrone.FLYING
+            return Drone.FLYING

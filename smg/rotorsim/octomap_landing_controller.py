@@ -4,7 +4,7 @@ from typing import Optional
 
 from smg.navigation import PlanningToolkit
 from smg.rigging.cameras import SimpleCamera
-from smg.rotory.drones import SimulatedDrone
+from smg.rotory.drones import Drone
 
 
 # noinspection SpellCheckingInspection
@@ -26,7 +26,7 @@ class OctomapLandingController:
 
     # SPECIAL METHODS
 
-    def __call__(self, drone_cur: SimpleCamera) -> SimulatedDrone.EState:
+    def __call__(self, drone_cur: SimpleCamera) -> Drone.EState:
         """
         Run an iteration of the landing controller.
 
@@ -46,13 +46,13 @@ class OctomapLandingController:
             # Otherwise, clear the goal height and cancel the landing.
             else:
                 self.__goal_y = None
-                return SimulatedDrone.FLYING
+                return Drone.FLYING
 
         # If the height of the drone is above the goal height, tell the drone to move downwards. If not, the landing
         # has finished.
         if drone_cur.p()[1] < self.__goal_y:
             drone_cur.move_v(-self.__linear_gain * 0.5)
-            return SimulatedDrone.LANDING
+            return Drone.LANDING
         else:
             self.__goal_y = None
-            return SimulatedDrone.IDLE
+            return Drone.IDLE
