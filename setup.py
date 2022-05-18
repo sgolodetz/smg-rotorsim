@@ -20,11 +20,13 @@ setup(
         "pygame",
         "PyOpenGL",
         "smg-joysticks",
+        "smg-meshing",
         "smg-navigation",
         "smg-open3d",
         "smg-opengl",
         "smg-pyoctomap",
         "smg-rigging",
+        "smg-rotorcontrol",
         "smg-rotory",
         "smg-utility"
     ],
