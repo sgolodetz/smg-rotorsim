@@ -13,7 +13,8 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from smg.meshing import MeshUtil
 from smg.navigation import OCS_OCCUPIED, PlanningToolkit
-from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
+from smg.opengl import CameraRenderer, SceneRenderer
+from smg.opengl import OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
 from smg.pyoctomap import CM_COLOR_HEIGHT, OctomapPicker, OctomapUtil, OcTree, OcTreeDrawer
 from smg.rigging.cameras import SimpleCamera
 from smg.rigging.controllers import KeyboardCameraController
@@ -25,7 +26,6 @@ from smg.utility import ImageUtil
 
 from .octomap_landing_controller import OctomapLandingController
 from .octomap_takeoff_controller import OctomapTakeoffController
-from .scene_renderer import SceneRenderer
 
 
 class DroneSimulator:
