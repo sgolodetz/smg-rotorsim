@@ -166,6 +166,7 @@ class DroneSimulator:
 
         # Construct the drone controller.
         kwargs: Dict[str, dict] = {
+            "aws_transcribe": dict(drone=self.__drone),
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
