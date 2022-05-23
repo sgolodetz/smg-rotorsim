@@ -33,13 +33,14 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, debug: bool = False, drone_controller_type: str, drone_mesh: o3d.geometry.TriangleMesh,
-                 intrinsics: Tuple[float, float, float, float], planning_octree_filename: Optional[str],
-                 scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
-                 window_size: Tuple[int, int] = (1280, 480)):
+    def __init__(self, *, audio_input_device: Optional[int] = None, debug: bool = False, drone_controller_type: str,
+                 drone_mesh: o3d.geometry.TriangleMesh, intrinsics: Tuple[float, float, float, float],
+                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
+                 scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
+        :param audio_input_device:          The index of the device to use for audio input (optional).
         :param debug:                       Whether to print out debugging messages.
         :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
@@ -51,6 +52,7 @@ class DroneSimulator:
         """
         self.__alive: bool = False
 
+        self.__audio_input_device: Optional[int] = audio_input_device
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
         self.__drone_controller: Optional[DroneController] = None
@@ -70,7 +72,7 @@ class DroneSimulator:
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
         self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
-        self.__third_person: bool = False
+        self.__third_person: bool = True
         self.__window_size: Tuple[int, int] = window_size
 
         self.__alive = True
@@ -166,6 +168,9 @@ class DroneSimulator:
 
         # Construct the drone controller.
         kwargs: Dict[str, dict] = {
+            "aws_transcribe": dict(
+                audio_input_device=self.__audio_input_device, debug=True, drone=self.__drone
+            ),
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
