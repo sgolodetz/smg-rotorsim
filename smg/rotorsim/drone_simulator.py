@@ -40,7 +40,7 @@ class DroneSimulator:
         """
         Construct a drone simulator.
 
-        :param audio_input_device:          The index of the device to use for audio input.
+        :param audio_input_device:          The index of the device to use for audio input (optional).
         :param debug:                       Whether to print out debugging messages.
         :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
