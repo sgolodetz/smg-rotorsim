@@ -72,7 +72,7 @@ class DroneSimulator:
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
         self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
-        self.__third_person: bool = False
+        self.__third_person: bool = True
         self.__window_size: Tuple[int, int] = window_size
 
         self.__alive = True
@@ -168,7 +168,9 @@ class DroneSimulator:
 
         # Construct the drone controller.
         kwargs: Dict[str, dict] = {
-            "aws_transcribe": dict(audio_input_device=self.__audio_input_device, drone=self.__drone),
+            "aws_transcribe": dict(
+                audio_input_device=self.__audio_input_device, debug=True, drone=self.__drone
+            ),
             "futaba_t6k": dict(drone=self.__drone),
             "keyboard": dict(drone=self.__drone),
             "rts": dict(
