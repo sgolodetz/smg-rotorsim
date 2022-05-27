@@ -41,7 +41,7 @@ class OctomapLandingController:
             # If that succeeds, set the goal height to that of the centre of the voxel just above the ground.
             # (Note that y points downwards in our coordinate system!)
             if ground_vpos is not None:
-                self.__goal_y = ground_vpos[1] - self.__planning_toolkit.get_tree().get_resolution()
+                self.__goal_y = ground_vpos[1] - self.__planning_toolkit.get_tree_resolution()
 
             # Otherwise, clear the goal height and cancel the landing.
             else:
