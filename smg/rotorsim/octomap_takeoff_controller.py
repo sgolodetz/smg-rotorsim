@@ -11,20 +11,18 @@ class OctomapTakeoffController:
 
     # CONSTRUCTOR
 
-    def __init__(self, drone: Drone, planning_toolkit: PlanningToolkit, *,
-                 takeoff_height: float = 1.0, target_velocity: float = 1.0):
+    def __init__(self, planning_toolkit: PlanningToolkit, *, takeoff_height: float = 1.0, velocity: float = 1.0):
         """
         Construct a takeoff controller for a simulated drone.
 
-        :param drone:               The drone.
         :param planning_toolkit:    The planning toolkit (used for traversability checking).
         :param takeoff_height:      The height (in m) above the ground to which the drone should take off.
-        :param target_velocity:     TODO
+        :param velocity:            TODO
         """
         self.__goal_y: Optional[float] = None
         self.__planning_toolkit: PlanningToolkit = planning_toolkit
         self.__takeoff_height: float = takeoff_height
-        self.__velocity: float = drone.calculate_up_velocity(rate=drone.calculate_up_rate(m_per_s=target_velocity))
+        self.__velocity: float = velocity
 
     # SPECIAL METHODS
 

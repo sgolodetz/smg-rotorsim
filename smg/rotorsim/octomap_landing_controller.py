@@ -13,17 +13,16 @@ class OctomapLandingController:
 
     # CONSTRUCTOR
 
-    def __init__(self, drone: Drone, planning_toolkit: PlanningToolkit, *, target_velocity: float = -1.0):
+    def __init__(self, planning_toolkit: PlanningToolkit, *, velocity: float = -1.0):
         """
         Construct a landing controller for a simulated drone.
 
-        :param drone:               The drone.
         :param planning_toolkit:    The planning toolkit (used for traversability checking).
-        :param target_velocity:     TODO
+        :param velocity:            TODO
         """
         self.__goal_y: Optional[float] = None
         self.__planning_toolkit: PlanningToolkit = planning_toolkit
-        self.__velocity: float = drone.calculate_up_velocity(rate=drone.calculate_up_rate(m_per_s=target_velocity))
+        self.__velocity: float = velocity
 
     # SPECIAL METHODS
 
