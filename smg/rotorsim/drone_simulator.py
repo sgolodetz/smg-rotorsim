@@ -21,6 +21,7 @@ from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotorcontrol import DroneControllerFactory
 from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import Drone, SimulatedDrone
+from smg.rotory.util import Beacon
 from smg.utility import ImageUtil
 
 from .octomap_landing_controller import OctomapLandingController
@@ -151,9 +152,6 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
-        # TODO
-        self.__drone.add_transmitter(SimulatedDrone.Transmitter(np.array([0.0, 0.0, 0.0]), 2.0))
-
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
         # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
         if self.__planning_toolkit is not None:
@@ -217,7 +215,7 @@ class DroneSimulator:
             )
 
             # TODO
-            print(f"Range Measurements: {self.__drone.get_range_measurements()}")
+            print(f"Beacon Ranges: {self.__drone.get_beacon_ranges()}")
 
             # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
             if self.__drone.get_state() != Drone.IDLE and not music_playing:
