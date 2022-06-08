@@ -151,6 +151,9 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
+        # TODO
+        self.__drone.add_transmitter(SimulatedDrone.Transmitter(np.array([0.0, 0.0, 0.0]), 2.0))
+
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
         # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
         if self.__planning_toolkit is not None:
@@ -212,6 +215,9 @@ class DroneSimulator:
                 events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics(),
                 tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
+
+            # TODO
+            print(f"Range Measurements: {self.__drone.get_range_measurements()}")
 
             # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
             if self.__drone.get_state() != Drone.IDLE and not music_playing:
