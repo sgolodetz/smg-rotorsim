@@ -11,18 +11,18 @@ class OctomapTakeoffController:
 
     # CONSTRUCTOR
 
-    def __init__(self, planning_toolkit: PlanningToolkit, *, takeoff_height: float = 1.0, velocity: float = 1.0):
+    def __init__(self, planning_toolkit: PlanningToolkit, *, speed: float = 1.0, takeoff_height: float = 1.0):
         """
         Construct a takeoff controller for a simulated drone.
 
         :param planning_toolkit:    The planning toolkit (used for traversability checking).
         :param takeoff_height:      The height (in m) above the ground to which the drone should take off.
-        :param velocity:            TODO
+        :param speed:               The speed (in m/s) at which the drone should ascend during the take off.
         """
         self.__goal_y: Optional[float] = None
         self.__planning_toolkit: PlanningToolkit = planning_toolkit
+        self.__speed: float = speed
         self.__takeoff_height: float = takeoff_height
-        self.__velocity: float = velocity
 
     # SPECIAL METHODS
 
@@ -31,7 +31,7 @@ class OctomapTakeoffController:
         Run an iteration of the takeoff controller.
 
         :param drone_cur:   A camera corresponding to the drone's current pose.
-        :param time_offset: TODO
+        :param time_offset: The time offset (in s) since the last iteration of the simulation.
         :return:            The state of the drone after this iteration of the controller.
         """
         # If there is no takeoff currently in progress:
@@ -45,7 +45,7 @@ class OctomapTakeoffController:
         # If the height of the drone is below the goal height, tell the drone to move upwards. If not, the takeoff
         # has finished.
         if drone_cur.p()[1] > self.__goal_y:
-            drone_cur.move_v(time_offset * self.__velocity)
+            drone_cur.move_v(time_offset * self.__speed)
             return Drone.TAKING_OFF
         else:
             self.__goal_y = None
