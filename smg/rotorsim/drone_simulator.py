@@ -210,9 +210,6 @@ class DroneSimulator:
                 tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
-            # TODO
-            print(f"Beacon Ranges: {self.__drone.get_beacon_ranges()}")
-
             # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
             if self.__drone.get_state() != Drone.IDLE and not music_playing:
                 pygame.mixer.music.play(loops=-1)
