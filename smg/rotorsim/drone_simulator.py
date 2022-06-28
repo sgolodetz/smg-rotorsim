@@ -21,7 +21,6 @@ from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotorcontrol import DroneControllerFactory
 from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import Drone, SimulatedDrone
-from smg.rotory.util import Beacon
 from smg.utility import ImageUtil
 
 from .octomap_landing_controller import OctomapLandingController
