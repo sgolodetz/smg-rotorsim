@@ -13,24 +13,25 @@ class OctomapLandingController:
 
     # CONSTRUCTOR
 
-    def __init__(self, planning_toolkit: PlanningToolkit, *, linear_gain: float):
+    def __init__(self, planning_toolkit: PlanningToolkit, *, speed: float = 1.0):
         """
         Construct a landing controller for a simulated drone.
 
         :param planning_toolkit:    The planning toolkit (used for traversability checking).
-        :param linear_gain:         The amount by which control inputs will be multiplied for linear drone movements.
+        :param speed:               The speed (in m/s) at which the drone should descend during the landing.
         """
         self.__goal_y: Optional[float] = None
-        self.__linear_gain: float = linear_gain
         self.__planning_toolkit: PlanningToolkit = planning_toolkit
+        self.__speed: float = speed
 
     # SPECIAL METHODS
 
-    def __call__(self, drone_cur: SimpleCamera) -> Drone.EState:
+    def __call__(self, drone_cur: SimpleCamera, time_offset: float) -> Drone.EState:
         """
         Run an iteration of the landing controller.
 
         :param drone_cur:   A camera corresponding to the drone's current pose.
+        :param time_offset: The time offset (in s) since the last iteration of the simulation.
         :return:            The state of the drone after this iteration of the controller.
         """
         # If there is no landing currently in progress:
@@ -51,7 +52,7 @@ class OctomapLandingController:
         # If the height of the drone is above the goal height, tell the drone to move downwards. If not, the landing
         # has finished.
         if drone_cur.p()[1] < self.__goal_y:
-            drone_cur.move_v(-self.__linear_gain * 0.5)
+            drone_cur.move_v(-time_offset * self.__speed)
             return Drone.LANDING
         else:
             self.__goal_y = None
