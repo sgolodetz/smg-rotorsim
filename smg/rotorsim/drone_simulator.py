@@ -148,7 +148,10 @@ class DroneSimulator:
 
         # Construct the simulated drone.
         self.__drone = SimulatedDrone(
-            image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
+            beacon_range_std=0.1,
+            image_renderer=self.__render_drone_image,
+            image_size=(width // 2, height),
+            intrinsics=self.__intrinsics
         )
 
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
