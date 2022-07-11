@@ -142,9 +142,17 @@ class DroneSimulator:
             if self.__scene_octree is not None:
                 self.__scene_octree_picker = OctomapPicker(self.__scene_octree, width // 2, height, self.__intrinsics)
 
-        # Load in the "drone flying" sound, and note that the music isn't initially playing.
-        pygame.mixer.music.load("C:/smglib/sounds/drone_flying.mp3")
-        music_playing: bool = False
+        # Try to load in the "drone flying" sound, and note that it isn't initially playing.
+        sound_loaded: bool = False
+        sound_playing: bool = False
+
+        sound_path: Optional[str] = os.environ.get("SMGLIB_DRONE_FLYING_SOUND_PATH")
+        if sound_path is None:
+            sound_path = "C:/smglib/sounds/drone_flying.mp3"
+
+        if os.path.exists(sound_path):
+            pygame.mixer.music.load(sound_path)
+            sound_loaded = True
 
         # Construct the simulated drone.
         self.__drone = SimulatedDrone(
@@ -212,15 +220,15 @@ class DroneSimulator:
                 tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
-            # If the drone is not in the idle state, and the "drone flying" sound is not playing, start it.
-            if self.__drone.get_state() != Drone.IDLE and not music_playing:
+            # If the drone is not in the idle state, and the "drone flying" sound is loaded but not playing, start it.
+            if self.__drone.get_state() != Drone.IDLE and sound_loaded and not sound_playing:
                 pygame.mixer.music.play(loops=-1)
-                music_playing = True
+                sound_playing = True
 
             # If the drone is in the idle state and the "drone flying" sound is playing, stop it.
-            if self.__drone.get_state() == Drone.IDLE and music_playing:
+            if self.__drone.get_state() == Drone.IDLE and sound_playing:
                 pygame.mixer.music.stop()
-                music_playing = False
+                sound_playing = False
 
             # Get the keys that are currently being pressed by the user.
             pressed_keys: Sequence[bool] = pygame.key.get_pressed()
