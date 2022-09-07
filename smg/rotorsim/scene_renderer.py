@@ -102,7 +102,7 @@ class SceneRenderer(Generic[Scene]):
     def render_to_image(self, render_scene: Callable[[], None], world_from_camera: np.ndarray,
                         image_size: Tuple[int, int], intrinsics: Tuple[float, float, float, float], *,
                         light_dirs: Optional[List[np.ndarray]] = None, use_backface_culling: bool = False) \
-            -> np.ndarray:
+            -> Tuple[np.ndarray, np.ndarray]:
         """
         Render the scene to an image.
 
@@ -145,7 +145,10 @@ class SceneRenderer(Generic[Scene]):
                     SceneRenderer.render(render_scene, light_dirs=light_dirs, use_backface_culling=use_backface_culling)
 
                     # Read the contents of the frame buffer into an image and return it.
-                    return OpenGLUtil.read_bgr_image(width, height)
+                    colour_image: np.ndarray = OpenGLUtil.read_bgr_image(width, height)
+                    depth_image: np.ndarray = OpenGLUtil.read_depth_image(width, height)
+                    # TODO: depth_image[depth_image > max_depth] = 0.0
+                    return colour_image, depth_image
 
     def terminate(self) -> None:
         """Destroy the renderer."""

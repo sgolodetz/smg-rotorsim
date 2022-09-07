@@ -230,13 +230,14 @@ class DroneSimulator:
                 return
 
             # Get the drone's image and poses.
-            drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
+            drone_colour_image, drone_depth_image, drone_camera_w_t_c, drone_chassis_w_t_c = \
+                self.__drone.get_image_and_poses()
 
             # If we're using the mapping client, send the frame across to the server.
             if self.__mapping_client is not None:
-                dummy_depth_image: np.ndarray = np.zeros(drone_image.shape[:2], dtype=np.float32)
                 self.__mapping_client.send_frame_message(lambda msg: RGBDFrameMessageUtil.fill_frame_message(
-                    self.__frame_idx, drone_image, ImageUtil.to_short_depth(dummy_depth_image), drone_camera_w_t_c, msg
+                    self.__frame_idx, drone_colour_image, ImageUtil.to_short_depth(drone_depth_image),
+                    drone_camera_w_t_c, msg
                 ))
 
             # Increment the frame index.
@@ -244,7 +245,7 @@ class DroneSimulator:
 
             # Allow the user to control the drone.
             self.__drone_controller.iterate(
-                events=events, image=drone_image, intrinsics=self.__drone.get_intrinsics(),
+                events=events, image=drone_colour_image, intrinsics=self.__drone.get_intrinsics(),
                 tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
@@ -271,7 +272,7 @@ class DroneSimulator:
             # Render the contents of the window.
             self.__render_window(
                 drone_chassis_w_t_c=drone_chassis_w_t_c,
-                drone_image=drone_image,
+                drone_image=drone_colour_image,
                 viewing_pose=camera_controller.get_pose()
             )
 
@@ -307,7 +308,7 @@ class DroneSimulator:
     # PRIVATE METHODS
 
     def __render_drone_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
-                             intrinsics: Tuple[float, float, float, float]) -> np.ndarray:
+                             intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
         Render a synthetic image of what the drone can see of the scene from its current pose.
 
