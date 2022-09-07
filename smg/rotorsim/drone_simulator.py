@@ -11,6 +11,8 @@ from OpenGL.GL import *
 from timeit import default_timer as timer
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+from smg.comms.base import RGBDFrameMessageUtil
+from smg.comms.mapping import MappingClient
 from smg.meshing import MeshUtil
 from smg.navigation import OCS_OCCUPIED, PlanningToolkit
 from smg.opengl import CameraRenderer, OpenGLImageRenderer, OpenGLMatrixContext, OpenGLTriMesh, OpenGLUtil
@@ -21,7 +23,7 @@ from smg.rigging.helpers import CameraPoseConverter, CameraUtil
 from smg.rotorcontrol import DroneControllerFactory
 from smg.rotorcontrol.controllers import DroneController
 from smg.rotory.drones import Drone, SimulatedDrone
-from smg.utility import ImageUtil
+from smg.utility import CameraParameters, ImageUtil
 
 from .octomap_landing_controller import OctomapLandingController
 from .octomap_takeoff_controller import OctomapTakeoffController
@@ -35,8 +37,9 @@ class DroneSimulator:
 
     def __init__(self, *, audio_input_device: Optional[int] = None, debug: bool = False, drone_controller_type: str,
                  drone_mesh: o3d.geometry.TriangleMesh, intrinsics: Tuple[float, float, float, float],
-                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
-                 scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
+                 mapping_client: Optional[MappingClient], planning_octree_filename: Optional[str],
+                 scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
+                 window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
@@ -45,6 +48,7 @@ class DroneSimulator:
         :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
         :param intrinsics:                  The camera intrinsics.
+        :param mapping_client:              The mapping client (if any) to use to stream frames to a mapping server.
         :param planning_octree_filename:    The name of a file containing an octree for path planning (optional).
         :param scene_mesh_filename:         The name of a file containing a mesh for the scene (optional).
         :param scene_octree_filename:       The name of a file containing an octree for the scene (optional).
@@ -59,8 +63,10 @@ class DroneSimulator:
         self.__drone_controller_type: str = drone_controller_type
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
         self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
+        self.__frame_idx: int = 0
         self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
+        self.__mapping_client: Optional[MappingClient] = mapping_client
         self.__octree_drawer: Optional[OcTreeDrawer] = None
         self.__planning_octree: Optional[OcTree] = None
         self.__planning_octree_filename: Optional[str] = planning_octree_filename
@@ -72,7 +78,7 @@ class DroneSimulator:
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
         self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
-        self.__third_person: bool = True
+        self.__third_person: bool = False
         self.__window_size: Tuple[int, int] = window_size
 
         self.__alive = True
@@ -159,6 +165,21 @@ class DroneSimulator:
             image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
+        # If we're using the mapping client, send a calibration message to tell the server the camera parameters.
+        if self.__mapping_client is not None:
+            image_size: Tuple[int, int] = self.__drone.get_image_size()
+            intrinsics: Optional[Tuple[float, float, float, float]] = self.__drone.get_intrinsics()
+            assert(intrinsics is not None)
+
+            calib: CameraParameters = CameraParameters()
+            calib.set("colour", *image_size, *intrinsics)
+            calib.set("depth", *image_size, *intrinsics)
+
+            self.__mapping_client.send_calibration_message(RGBDFrameMessageUtil.make_calibration_message(
+                calib.get_image_size("colour"), calib.get_image_size("depth"),
+                calib.get_intrinsics("colour"), calib.get_intrinsics("depth")
+            ))
+
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
         # drone with ones that use the octree. (This allows us to land on the ground rather than in mid-air!)
         if self.__planning_toolkit is not None:
@@ -210,6 +231,16 @@ class DroneSimulator:
 
             # Get the drone's image and poses.
             drone_image, drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_image_and_poses()
+
+            # If we're using the mapping client, send the frame across to the server.
+            if self.__mapping_client is not None:
+                dummy_depth_image: np.ndarray = np.zeros(drone_image.shape[:2], dtype=np.float32)
+                self.__mapping_client.send_frame_message(lambda msg: RGBDFrameMessageUtil.fill_frame_message(
+                    self.__frame_idx, drone_image, ImageUtil.to_short_depth(dummy_depth_image), drone_camera_w_t_c, msg
+                ))
+
+            # Increment the frame index.
+            self.__frame_idx += 1
 
             # Allow the user to control the drone.
             self.__drone_controller.iterate(
@@ -318,7 +349,7 @@ class DroneSimulator:
                 OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
 
             # Render the UI for the drone controller.
-            self.__drone_controller.render_ui()
+            # self.__drone_controller.render_ui()
 
             # If we're in third-person mode:
             if self.__third_person:
