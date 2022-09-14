@@ -98,11 +98,12 @@ class DroneSimulator:
     def run(self) -> None:
         """Run the drone simulator."""
         # TODO
-        # False False - if correct drone image needed by the drone controller or the mapping server
-        # True False - expensive, avoid if possible
-        # True True - if correct drone image not needed by the drone controller or the mapping server
-        should_render_ui_image: bool = self.__mapping_client is None
-        drone_should_render_ui_image: bool = should_render_ui_image
+        make_drone_rgbd_image: bool = self.__mapping_client is not None
+        make_drone_ui_image: bool = self.__mapping_client is None
+
+        # TODO
+        if make_drone_rgbd_image is None and make_drone_ui_image is None:
+            raise RuntimeError("TODO")
 
         # Initialise PyGame and some of its modules.
         pygame.init()
@@ -169,9 +170,8 @@ class DroneSimulator:
 
         # Construct the simulated drone.
         self.__drone = SimulatedDrone(
-            image_renderer=self.__render_drone_ui_image
-            if drone_should_render_ui_image else self.__render_drone_camera_image,
-            image_size=(width // 2, height), intrinsics=self.__intrinsics
+            image_renderer=self.__render_drone_camera_image, image_size=(width // 2, height),
+            intrinsics=self.__intrinsics
         )
 
         # If we're using the mapping client, send a calibration message to tell the server the camera parameters.
@@ -238,9 +238,22 @@ class DroneSimulator:
             if self.__drone_controller.has_finished():
                 return
 
-            # Get the drone's RGB-D image and poses.
-            drone_colour_image, drone_depth_image, drone_camera_w_t_c, drone_chassis_w_t_c = \
-                self.__drone.get_rgbd_image_and_poses()
+            # Get the drone's camera and chassis poses.
+            drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_poses()
+
+            # TODO: Comment here.
+            drone_colour_image: Optional[np.ndarray] = None
+            drone_depth_image: Optional[np.ndarray] = None
+            if make_drone_rgbd_image:
+                drone_colour_image, drone_depth_image = self.__drone.get_rgbd_image()
+
+            # TODO: Comment here.
+            drone_ui_image: Optional[np.ndarray] = None
+            if make_drone_ui_image:
+                drone_ui_image, _ = self.__render_drone_ui_image(
+                    drone_camera_w_t_c, drone_chassis_w_t_c, self.__drone.get_image_size(),
+                    self.__drone.get_intrinsics()
+                )
 
             # If we're using the mapping client, send the frame across to the server.
             if self.__mapping_client is not None:
@@ -254,8 +267,8 @@ class DroneSimulator:
 
             # Allow the user to control the drone.
             self.__drone_controller.iterate(
-                events=events, image=drone_colour_image, intrinsics=self.__drone.get_intrinsics(),
-                tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
+                events=events, image=drone_colour_image if drone_colour_image is not None else drone_ui_image,
+                intrinsics=self.__drone.get_intrinsics(), tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
             # If the drone is not in the idle state, and the "drone flying" sound is loaded but not playing, start it.
@@ -278,24 +291,10 @@ class DroneSimulator:
             if pressed_keys[pygame.K_g]:
                 self.__drone.set_drone_origin(camera_controller.get_camera())
 
-            # TODO: Comment here.
-            if not should_render_ui_image or drone_should_render_ui_image:
-                drone_ui_image: np.ndarray = drone_colour_image.copy()
-            else:
-                drone_ui_image, _ = self.__render_drone_ui_image(
-                    drone_camera_w_t_c, drone_chassis_w_t_c, self.__drone.get_image_size(),
-                    self.__drone.get_intrinsics()
-                )
-
-            # FIXME: Remove this.
-            # cv2.imshow("Drone Colour Image", drone_colour_image)
-            # cv2.imshow("Drone UI Image", drone_ui_image)
-            # cv2.waitKey(1)
-
             # Render the contents of the window.
             self.__render_window(
                 drone_chassis_w_t_c=drone_chassis_w_t_c,
-                drone_ui_image=drone_ui_image,
+                drone_image=drone_ui_image if drone_ui_image is not None else drone_colour_image,
                 viewing_pose=camera_controller.get_pose()
             )
 
@@ -416,14 +415,13 @@ class DroneSimulator:
             np.linalg.inv(CameraPoseConverter.camera_to_pose(cam)), image_size, intrinsics
         )
 
-    def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_ui_image: np.ndarray, viewing_pose: np.ndarray) \
+    def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_image: np.ndarray, viewing_pose: np.ndarray) \
             -> None:
         """
-        FIXME: Sort out this comment.
         Render the contents of the window.
 
         :param drone_chassis_w_t_c: The pose of the drone's chassis.
-        :param drone_ui_image:      A synthetic image rendered from the pose of the drone's camera.
+        :param drone_image:         A synthetic image rendered from the pose of the drone's camera.
         :param viewing_pose:        The pose of the free-view camera.
         """
         # Clear the window.
@@ -472,7 +470,7 @@ class DroneSimulator:
         # Render the drone image.
         # FIXME: Sort out this comment.
         OpenGLUtil.set_viewport((0.5, 0.0), (1.0, 1.0), self.__window_size)
-        self.__gl_image_renderer.render_image(ImageUtil.flip_channels(drone_ui_image))
+        self.__gl_image_renderer.render_image(ImageUtil.flip_channels(drone_image))
 
         # Swap the front and back buffers.
         pygame.display.flip()
