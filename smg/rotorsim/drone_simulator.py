@@ -78,7 +78,7 @@ class DroneSimulator:
         self.__scene_octree_filename: Optional[str] = scene_octree_filename
         self.__scene_octree_picker: Optional[OctomapPicker] = None
         self.__scene_renderer: Optional[SceneRenderer] = None
-        self.__third_person: bool = False
+        self.__third_person: bool = True
         self.__window_size: Tuple[int, int] = window_size
 
         self.__alive = True
@@ -97,6 +97,13 @@ class DroneSimulator:
 
     def run(self) -> None:
         """Run the drone simulator."""
+        # TODO
+        # False False - if correct drone image needed by the drone controller or the mapping server
+        # True False - expensive, avoid if possible
+        # True True - if correct drone image not needed by the drone controller or the mapping server
+        should_render_ui_image: bool = self.__mapping_client is None
+        drone_should_render_ui_image: bool = should_render_ui_image
+
         # Initialise PyGame and some of its modules.
         pygame.init()
         pygame.joystick.init()
@@ -162,7 +169,9 @@ class DroneSimulator:
 
         # Construct the simulated drone.
         self.__drone = SimulatedDrone(
-            image_renderer=self.__render_drone_image, image_size=(width // 2, height), intrinsics=self.__intrinsics
+            image_renderer=self.__render_drone_ui_image
+            if drone_should_render_ui_image else self.__render_drone_camera_image,
+            image_size=(width // 2, height), intrinsics=self.__intrinsics
         )
 
         # If we're using the mapping client, send a calibration message to tell the server the camera parameters.
@@ -229,9 +238,9 @@ class DroneSimulator:
             if self.__drone_controller.has_finished():
                 return
 
-            # Get the drone's image and poses.
+            # Get the drone's RGB-D image and poses.
             drone_colour_image, drone_depth_image, drone_camera_w_t_c, drone_chassis_w_t_c = \
-                self.__drone.get_images_and_poses()
+                self.__drone.get_rgbd_image_and_poses()
 
             # If we're using the mapping client, send the frame across to the server.
             if self.__mapping_client is not None:
@@ -269,10 +278,24 @@ class DroneSimulator:
             if pressed_keys[pygame.K_g]:
                 self.__drone.set_drone_origin(camera_controller.get_camera())
 
+            # TODO: Comment here.
+            if not should_render_ui_image or drone_should_render_ui_image:
+                drone_ui_image: np.ndarray = drone_colour_image.copy()
+            else:
+                drone_ui_image, _ = self.__render_drone_ui_image(
+                    drone_camera_w_t_c, drone_chassis_w_t_c, self.__drone.get_image_size(),
+                    self.__drone.get_intrinsics()
+                )
+
+            # FIXME: Remove this.
+            # cv2.imshow("Drone Colour Image", drone_colour_image)
+            # cv2.imshow("Drone UI Image", drone_ui_image)
+            # cv2.waitKey(1)
+
             # Render the contents of the window.
             self.__render_window(
                 drone_chassis_w_t_c=drone_chassis_w_t_c,
-                drone_image=drone_colour_image,
+                drone_ui_image=drone_ui_image,
                 viewing_pose=camera_controller.get_pose()
             )
 
@@ -307,9 +330,69 @@ class DroneSimulator:
 
     # PRIVATE METHODS
 
-    def __render_drone_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
-                             intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
+    def __render_drone_camera_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
+                                    intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
+        FIXME: Sort out the function name and comment.
+        Render a synthetic image of what the drone can see of the scene from its current pose.
+
+        .. note::
+            This function effectively just uses the scene renderer to apply appropriate lighting to a scene
+            actually rendered by the function returned by __render_drone_scene.
+
+        :param camera_w_t_c:    The pose of the drone's camera.
+        :param chassis_w_t_c:   The pose of the drone's chassis.
+        :param image_size:      The size of image to render.
+        :param intrinsics:      The camera intrinsics.
+        :return:                The rendered image.
+        """
+        # Render a synthetic image of what the drone can see of the scene from its current pose.
+        return self.__scene_renderer.render_rgbd_image(
+            self.__render_drone_scene(chassis_w_t_c, render_ui=False, third_person=False),
+            camera_w_t_c, image_size, intrinsics
+        )
+
+    def __render_drone_scene(self, chassis_w_t_c: np.ndarray, *, render_ui: bool, third_person: bool) \
+            -> Callable[[], None]:
+        """
+        Make a function that will render what the drone can see of the scene from its current pose.
+
+        :param chassis_w_t_c:   The pose of the drone's chassis.
+        :param render_ui:       TODO
+        :param third_person:    TODO
+        :return:                A function that will render what the drone can see of the scene from its current pose.
+        """
+        def inner() -> None:
+            """Render what the drone can see of the scene from its current pose."""
+            # If a mesh is available for the scene, render it.
+            if self.__scene_mesh is not None:
+                self.__scene_mesh.render()
+            # Otherwise, if an octree is available for the scene, render it.
+            elif self.__scene_octree is not None:
+                OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
+
+            # If requested, render the UI for the drone controller.
+            if render_ui:
+                self.__drone_controller.render_ui()
+
+            # If we're in third-person mode:
+            if third_person:
+                # Render the mesh for the drone (at its current pose), blending it over the rest of the scene.
+                glEnable(GL_BLEND)
+                glBlendColor(0.5, 0.5, 0.5, 0.5)
+                glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR)
+
+                with OpenGLMatrixContext(GL_MODELVIEW, lambda: OpenGLUtil.mult_matrix(chassis_w_t_c)):
+                    SceneRenderer.render(lambda: self.__drone_mesh.render(), use_backface_culling=True)
+
+                glDisable(GL_BLEND)
+
+        return inner
+
+    def __render_drone_ui_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
+                                intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        FIXME: Sort out the function name and comment.
         Render a synthetic image of what the drone can see of the scene from its current pose.
 
         .. note::
@@ -328,51 +411,19 @@ class DroneSimulator:
             cam.move_n(-0.5)
 
         # Render a synthetic image of what the drone can see of the scene from its (possibly adjusted) camera pose.
-        return self.__scene_renderer.render_to_image(
-            self.__render_drone_scene(chassis_w_t_c), np.linalg.inv(CameraPoseConverter.camera_to_pose(cam)),
-            image_size, intrinsics
+        return self.__scene_renderer.render_rgbd_image(
+            self.__render_drone_scene(chassis_w_t_c, render_ui=True, third_person=self.__third_person),
+            np.linalg.inv(CameraPoseConverter.camera_to_pose(cam)), image_size, intrinsics
         )
 
-    def __render_drone_scene(self, chassis_w_t_c: np.ndarray) -> Callable[[], None]:
-        """
-        Make a function that will render what the drone can see of the scene from its current pose.
-
-        :param chassis_w_t_c:   The pose of the drone's chassis.
-        :return:                A function that will render what the drone can see of the scene from its current pose.
-        """
-        def inner() -> None:
-            """Render what the drone can see of the scene from its current pose."""
-            # If a mesh is available for the scene, render it.
-            if self.__scene_mesh is not None:
-                self.__scene_mesh.render()
-            # Otherwise, if an octree is available for the scene, render it.
-            elif self.__scene_octree is not None:
-                OctomapUtil.draw_octree(self.__scene_octree, self.__octree_drawer)
-
-            # Render the UI for the drone controller.
-            # self.__drone_controller.render_ui()
-
-            # If we're in third-person mode:
-            if self.__third_person:
-                # Render the mesh for the drone (at its current pose), blending it over the rest of the scene.
-                glEnable(GL_BLEND)
-                glBlendColor(0.5, 0.5, 0.5, 0.5)
-                glBlendFunc(GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR)
-
-                with OpenGLMatrixContext(GL_MODELVIEW, lambda: OpenGLUtil.mult_matrix(chassis_w_t_c)):
-                    SceneRenderer.render(lambda: self.__drone_mesh.render(), use_backface_culling=True)
-
-                glDisable(GL_BLEND)
-
-        return inner
-
-    def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_image: np.ndarray, viewing_pose: np.ndarray) \
+    def __render_window(self, *, drone_chassis_w_t_c: np.ndarray, drone_ui_image: np.ndarray, viewing_pose: np.ndarray) \
             -> None:
         """
+        FIXME: Sort out this comment.
         Render the contents of the window.
 
         :param drone_chassis_w_t_c: The pose of the drone's chassis.
-        :param drone_image:         A synthetic image rendered from the pose of the drone's camera.
+        :param drone_ui_image:      A synthetic image rendered from the pose of the drone's camera.
         :param viewing_pose:        The pose of the free-view camera.
         """
         # Clear the window.
@@ -419,8 +470,9 @@ class DroneSimulator:
         glPopAttrib()
 
         # Render the drone image.
+        # FIXME: Sort out this comment.
         OpenGLUtil.set_viewport((0.5, 0.0), (1.0, 1.0), self.__window_size)
-        self.__gl_image_renderer.render_image(ImageUtil.flip_channels(drone_image))
+        self.__gl_image_renderer.render_image(ImageUtil.flip_channels(drone_ui_image))
 
         # Swap the front and back buffers.
         pygame.display.flip()
