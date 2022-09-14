@@ -231,7 +231,7 @@ class DroneSimulator:
 
             # Get the drone's image and poses.
             drone_colour_image, drone_depth_image, drone_camera_w_t_c, drone_chassis_w_t_c = \
-                self.__drone.get_image_and_poses()
+                self.__drone.get_images_and_poses()
 
             # If we're using the mapping client, send the frame across to the server.
             if self.__mapping_client is not None:
