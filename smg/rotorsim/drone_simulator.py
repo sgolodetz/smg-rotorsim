@@ -98,11 +98,11 @@ class DroneSimulator:
     def run(self) -> None:
         """Run the drone simulator."""
         # TODO
-        make_drone_rgbd_image: bool = self.__mapping_client is not None
+        make_drone_camera_image: bool = self.__mapping_client is not None
         make_drone_ui_image: bool = self.__mapping_client is None
 
         # TODO
-        if make_drone_rgbd_image is None and make_drone_ui_image is None:
+        if make_drone_camera_image is None and make_drone_ui_image is None:
             raise RuntimeError("TODO")
 
         # Initialise PyGame and some of its modules.
@@ -174,16 +174,17 @@ class DroneSimulator:
             intrinsics=self.__intrinsics
         )
 
+        # Get the drone's camera parameters.
+        image_size: Tuple[int, int] = self.__drone.get_image_size()
+        intrinsics: Optional[Tuple[float, float, float, float]] = self.__drone.get_intrinsics()
+        assert (intrinsics is not None)
+
+        calib: CameraParameters = CameraParameters()
+        calib.set("colour", *image_size, *intrinsics)
+        calib.set("depth", *image_size, *intrinsics)
+
         # If we're using the mapping client, send a calibration message to tell the server the camera parameters.
         if self.__mapping_client is not None:
-            image_size: Tuple[int, int] = self.__drone.get_image_size()
-            intrinsics: Optional[Tuple[float, float, float, float]] = self.__drone.get_intrinsics()
-            assert(intrinsics is not None)
-
-            calib: CameraParameters = CameraParameters()
-            calib.set("colour", *image_size, *intrinsics)
-            calib.set("depth", *image_size, *intrinsics)
-
             self.__mapping_client.send_calibration_message(RGBDFrameMessageUtil.make_calibration_message(
                 calib.get_image_size("colour"), calib.get_image_size("depth"),
                 calib.get_intrinsics("colour"), calib.get_intrinsics("depth")
@@ -241,19 +242,13 @@ class DroneSimulator:
             # Get the drone's camera and chassis poses.
             drone_camera_w_t_c, drone_chassis_w_t_c = self.__drone.get_poses()
 
-            # TODO: Comment here.
-            drone_colour_image: Optional[np.ndarray] = None
-            drone_depth_image: Optional[np.ndarray] = None
-            if make_drone_rgbd_image:
+            # If requested, make an RGB-D image showing what can be seen from the drone's camera.
+            # Otherwise, just use a blank image as the default.
+            width, height = image_size
+            drone_colour_image: Optional[np.ndarray] = np.zeros((height, width, 3), dtype=np.uint8)
+            drone_depth_image: Optional[np.ndarray] = np.zeros((height, width), dtype=np.float32)
+            if make_drone_camera_image:
                 drone_colour_image, drone_depth_image = self.__drone.get_rgbd_image()
-
-            # TODO: Comment here.
-            drone_ui_image: Optional[np.ndarray] = None
-            if make_drone_ui_image:
-                drone_ui_image, _ = self.__render_drone_ui_image(
-                    drone_camera_w_t_c, drone_chassis_w_t_c, self.__drone.get_image_size(),
-                    self.__drone.get_intrinsics()
-                )
 
             # If we're using the mapping client, send the frame across to the server.
             if self.__mapping_client is not None:
@@ -267,7 +262,7 @@ class DroneSimulator:
 
             # Allow the user to control the drone.
             self.__drone_controller.iterate(
-                events=events, image=drone_colour_image if drone_colour_image is not None else drone_ui_image,
+                events=events, image=drone_colour_image,
                 intrinsics=self.__drone.get_intrinsics(), tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
@@ -290,6 +285,20 @@ class DroneSimulator:
             # If the user presses the 'g' key, set the drone's origin to the current location of the free-view camera.
             if pressed_keys[pygame.K_g]:
                 self.__drone.set_drone_origin(camera_controller.get_camera())
+
+            # If requested, make a first-person/third-person RGB image showing the scene from the drone's
+            # perspective for use as part of the user interface. Note that this may well be different to
+            # the image showing what can be seen from the drone's camera, since it may be rendered from
+            # third-person rather than first-person, and may also include user interface elements such as
+            # the 3D cursor. However, since rendering yet another view of the scene may be costly, we make
+            # it possible to skip rendering this image if not really needed and fall back to the existing
+            # first-person image from the drone's camera.
+            drone_ui_image: Optional[np.ndarray] = None
+            if make_drone_ui_image:
+                drone_ui_image, _ = self.__render_drone_ui_image(
+                    drone_camera_w_t_c, drone_chassis_w_t_c, self.__drone.get_image_size(),
+                    self.__drone.get_intrinsics()
+                )
 
             # Render the contents of the window.
             self.__render_window(
