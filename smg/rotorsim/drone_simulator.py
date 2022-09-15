@@ -97,13 +97,9 @@ class DroneSimulator:
 
     def run(self) -> None:
         """Run the drone simulator."""
-        # TODO
+        # Flags indicating whether or not to render different images of the scene from the drone's perspective.
         make_drone_camera_image: bool = self.__mapping_client is not None
         make_drone_ui_image: bool = self.__mapping_client is None
-
-        # TODO
-        if make_drone_camera_image is None and make_drone_ui_image is None:
-            raise RuntimeError("TODO")
 
         # Initialise PyGame and some of its modules.
         pygame.init()
@@ -286,13 +282,11 @@ class DroneSimulator:
             if pressed_keys[pygame.K_g]:
                 self.__drone.set_drone_origin(camera_controller.get_camera())
 
-            # If requested, make a first-person/third-person RGB image showing the scene from the drone's
-            # perspective for use as part of the user interface. Note that this may well be different to
-            # the image showing what can be seen from the drone's camera, since it may be rendered from
-            # third-person rather than first-person, and may also include user interface elements such as
-            # the 3D cursor. However, since rendering yet another view of the scene may be costly, we make
-            # it possible to skip rendering this image if not really needed and fall back to the existing
-            # first-person image from the drone's camera.
+            # If requested, make a first-person/third-person RGB-D image showing the scene from the drone's
+            # perspective for use as part of the user interface. Note that this will typically be different
+            # from the image showing what can be seen from the drone's camera (see function notes). However,
+            # as rendering yet another view of the scene may be costly, we make it possible to skip this if
+            # not really needed and fall back to the existing first-person image from the drone's camera.
             drone_ui_image: Optional[np.ndarray] = None
             if make_drone_ui_image:
                 drone_ui_image, _ = self.__render_drone_ui_image(
@@ -341,8 +335,7 @@ class DroneSimulator:
     def __render_drone_camera_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
                                     intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
-        FIXME: Sort out the function name and comment.
-        Render a synthetic image of what the drone can see of the scene from its current pose.
+        Render a synthetic RGB-D image of what the drone's camera can see of the scene from its current pose.
 
         .. note::
             This function effectively just uses the scene renderer to apply appropriate lighting to a scene
@@ -352,9 +345,8 @@ class DroneSimulator:
         :param chassis_w_t_c:   The pose of the drone's chassis.
         :param image_size:      The size of image to render.
         :param intrinsics:      The camera intrinsics.
-        :return:                The rendered image.
+        :return:                The rendered RGB-D image, as a (colour image, depth image) pair.
         """
-        # Render a synthetic image of what the drone can see of the scene from its current pose.
         return self.__scene_renderer.render_rgbd_image(
             self.__render_drone_scene(chassis_w_t_c, render_ui=False, third_person=False),
             camera_w_t_c, image_size, intrinsics
@@ -366,8 +358,8 @@ class DroneSimulator:
         Make a function that will render what the drone can see of the scene from its current pose.
 
         :param chassis_w_t_c:   The pose of the drone's chassis.
-        :param render_ui:       TODO
-        :param third_person:    TODO
+        :param render_ui:       Whether to render the user interface for the drone controller.
+        :param third_person:    Whether to render from third-person (rather than first-person) view.
         :return:                A function that will render what the drone can see of the scene from its current pose.
         """
         def inner() -> None:
@@ -400,18 +392,22 @@ class DroneSimulator:
     def __render_drone_ui_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
                                 intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
-        FIXME: Sort out the function name and comment.
-        Render a synthetic image of what the drone can see of the scene from its current pose.
+        Render a first-person/third-person RGB-D image showing the scene from the drone's perspective for use
+        as part of the user interface.
 
         .. note::
             This function effectively just uses the scene renderer to apply appropriate lighting to a scene
             actually rendered by the function returned by __render_drone_scene.
+        .. note::
+            The resulting image will typically be different from that returned by __render_drone_camera_image,
+            since it may be rendered from third-person rather than first-person view, and may also include user
+            interface elements related to the drone controller, such as a 3D cursor.
 
         :param camera_w_t_c:    The pose of the drone's camera.
         :param chassis_w_t_c:   The pose of the drone's chassis.
         :param image_size:      The size of image to render.
         :param intrinsics:      The camera intrinsics.
-        :return:                The rendered image.
+        :return:                The rendered image, as a (colour image, depth image) pair.
         """
         # Adjust the camera pose for third-person view if needed.
         cam: SimpleCamera = CameraPoseConverter.pose_to_camera(np.linalg.inv(camera_w_t_c))
