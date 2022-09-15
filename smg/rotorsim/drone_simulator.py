@@ -175,15 +175,10 @@ class DroneSimulator:
         intrinsics: Optional[Tuple[float, float, float, float]] = self.__drone.get_intrinsics()
         assert (intrinsics is not None)
 
-        calib: CameraParameters = CameraParameters()
-        calib.set("colour", *image_size, *intrinsics)
-        calib.set("depth", *image_size, *intrinsics)
-
         # If we're using the mapping client, send a calibration message to tell the server the camera parameters.
         if self.__mapping_client is not None:
             self.__mapping_client.send_calibration_message(RGBDFrameMessageUtil.make_calibration_message(
-                calib.get_image_size("colour"), calib.get_image_size("depth"),
-                calib.get_intrinsics("colour"), calib.get_intrinsics("depth")
+                image_size, image_size, intrinsics, intrinsics
             ))
 
         # If an octree is available for path planning, replace the default landing and takeoff controllers for the
@@ -426,7 +421,7 @@ class DroneSimulator:
         Render the contents of the window.
 
         :param drone_chassis_w_t_c: The pose of the drone's chassis.
-        :param drone_image:         A synthetic image rendered from the pose of the drone's camera.
+        :param drone_image:         A synthetic image of the scene rendered from the drone's perspective.
         :param viewing_pose:        The pose of the free-view camera.
         """
         # Clear the window.
@@ -473,7 +468,6 @@ class DroneSimulator:
         glPopAttrib()
 
         # Render the drone image.
-        # FIXME: Sort out this comment.
         OpenGLUtil.set_viewport((0.5, 0.0), (1.0, 1.0), self.__window_size)
         self.__gl_image_renderer.render_image(ImageUtil.flip_channels(drone_image))
 
