@@ -45,7 +45,7 @@ class DroneSimulator:
 
         :param audio_input_device:          The index of the device to use for audio input (optional).
         :param beacon_range_std:            The standard deviation of the zero-mean Gaussian noise to add when getting
-                                            the ranges of the fake beacons.
+                                            the ranges of the fake beacons (defaults to zero).
         :param debug:                       Whether to print out debugging messages.
         :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
