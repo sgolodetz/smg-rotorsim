@@ -35,15 +35,17 @@ class DroneSimulator:
 
     # CONSTRUCTOR
 
-    def __init__(self, *, audio_input_device: Optional[int] = None, debug: bool = False, drone_controller_type: str,
-                 drone_mesh: o3d.geometry.TriangleMesh, intrinsics: Tuple[float, float, float, float],
-                 mapping_client: Optional[MappingClient], planning_octree_filename: Optional[str],
-                 scene_mesh_filename: Optional[str], scene_octree_filename: Optional[str],
-                 window_size: Tuple[int, int] = (1280, 480)):
+    def __init__(self, *, audio_input_device: Optional[int] = None, beacon_range_std: float = 0.0,
+                 debug: bool = False, drone_controller_type: str, drone_mesh: o3d.geometry.TriangleMesh,
+                 intrinsics: Tuple[float, float, float, float], mapping_client: Optional[MappingClient],
+                 planning_octree_filename: Optional[str], scene_mesh_filename: Optional[str],
+                 scene_octree_filename: Optional[str], window_size: Tuple[int, int] = (1280, 480)):
         """
         Construct a drone simulator.
 
         :param audio_input_device:          The index of the device to use for audio input (optional).
+        :param beacon_range_std:            The standard deviation of the zero-mean Gaussian noise to add when getting
+                                            the ranges of the fake beacons (defaults to zero).
         :param debug:                       Whether to print out debugging messages.
         :param drone_controller_type:       The type of drone controller to use.
         :param drone_mesh:                  An Open3D mesh for the drone.
@@ -57,6 +59,7 @@ class DroneSimulator:
         self.__alive: bool = False
 
         self.__audio_input_device: Optional[int] = audio_input_device
+        self.__beacon_range_std: float = beacon_range_std
         self.__debug: bool = debug
         self.__drone: Optional[SimulatedDrone] = None
         self.__drone_controller: Optional[DroneController] = None
@@ -166,7 +169,9 @@ class DroneSimulator:
 
         # Construct the simulated drone.
         self.__drone = SimulatedDrone(
-            image_renderer=self.__render_drone_camera_image, image_size=(width // 2, height),
+            beacon_range_std=self.__beacon_range_std,
+            image_renderer=self.__render_drone_camera_image,
+            image_size=(width // 2, height),
             intrinsics=self.__intrinsics
         )
 
