@@ -389,7 +389,7 @@ class DroneSimulator:
 
         return inner
 
-    def __render_drone_ui_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c, image_size: Tuple[int, int],
+    def __render_drone_ui_image(self, camera_w_t_c: np.ndarray, chassis_w_t_c: np.ndarray, image_size: Tuple[int, int],
                                 intrinsics: Tuple[float, float, float, float]) -> Tuple[np.ndarray, np.ndarray]:
         """
         Render a first-person/third-person RGB-D image showing the scene from the drone's perspective for use
