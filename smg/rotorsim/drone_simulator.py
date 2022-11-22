@@ -258,8 +258,8 @@ class DroneSimulator:
 
             # Allow the user to control the drone.
             self.__drone_controller.iterate(
-                events=events, image=drone_colour_image,
-                intrinsics=self.__drone.get_intrinsics(), tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
+                events=events, image=drone_colour_image, intrinsics=self.__drone.get_intrinsics(),
+                tracker_c_t_i=np.linalg.inv(drone_camera_w_t_c)
             )
 
             # If the drone is not in the idle state, and the "drone flying" sound is loaded but not playing, start it.
