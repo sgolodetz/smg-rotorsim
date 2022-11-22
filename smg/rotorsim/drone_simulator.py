@@ -67,8 +67,8 @@ class DroneSimulator:
         self.__drone_mesh: Optional[OpenGLTriMesh] = None
         self.__drone_mesh_o3d: o3d.geometry.TriangleMesh = drone_mesh
         self.__frame_idx: int = 0
-        self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__gl_image_renderer: Optional[OpenGLImageRenderer] = None
+        self.__intrinsics: Tuple[float, float, float, float] = intrinsics
         self.__mapping_client: Optional[MappingClient] = mapping_client
         self.__octree_drawer: Optional[OcTreeDrawer] = None
         self.__planning_octree: Optional[OcTree] = None
